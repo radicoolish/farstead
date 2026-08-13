@@ -194,30 +194,26 @@ def render_household_combinations(people: list[dict]) -> None:
 
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
 
+    combo_labels = list(combo_data.keys())
+    # Shared scale + legend so colors and legend layout match between the
+    # line chart and the bar chart below it. No `columns` limit is set, so
+    # Vega keeps the legend on a single row instead of wrapping.
+    color_scale = alt.Scale(domain=combo_labels)
+    legend = alt.Legend(title=None, orient="bottom", labelLimit=500, labelFontSize=13)
+
     long_df = (
         pd.concat(combo_data, axis=1)
         .rename_axis("Year")
         .reset_index()
         .melt(id_vars="Year", var_name="Combination", value_name="Balance")
     )
-    chart = (
+    line_chart = (
         alt.Chart(long_df)
         .mark_line()
         .encode(
             x=alt.X("Year:O", title="Year"),
             y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
-            color=alt.Color(
-                "Combination:N",
-                legend=alt.Legend(
-                    title=None,
-                    orient="bottom",
-                    columns=2,
-                    labelLimit=500,
-                    labelFontSize=13,
-                    symbolLimit=MAX_HOUSEHOLD_COMBOS,
-                    rowPadding=6,
-                ),
-            ),
+            color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=legend),
             tooltip=[
                 alt.Tooltip("Combination:N"),
                 alt.Tooltip("Year:O"),
@@ -226,34 +222,39 @@ def render_household_combinations(people: list[dict]) -> None:
         )
         .properties(height=420)
     )
-    st.altair_chart(chart, width="stretch")
+    st.altair_chart(line_chart, width="stretch")
 
-    render_household_combo_totals(combo_data)
+    render_household_combo_bars(combo_data, combo_labels, color_scale, legend)
 
 
-def render_household_combo_totals(combo_data: dict[str, pd.Series]) -> None:
-    """Readable, wrapped grid of each combination's final projected balance."""
+def render_household_combo_bars(
+    combo_data: dict[str, pd.Series],
+    combo_labels: list[str],
+    color_scale: alt.Scale,
+    legend: alt.Legend,
+) -> None:
+    """Bar chart of each combination's final projected balance, colored to
+    match the line chart above (same scale/legend, x-axis labels hidden
+    since the legend already identifies each bar)."""
+    bar_df = pd.DataFrame({
+        "Combination": combo_labels,
+        "Balance": [combo_data[label].iloc[-1] for label in combo_labels],
+    })
+
+    bars = alt.Chart(bar_df).mark_bar().encode(
+        x=alt.X("Combination:N", sort=combo_labels, axis=None, title=None),
+        y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
+        color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=legend),
+        tooltip=[alt.Tooltip("Combination:N"), alt.Tooltip("Balance:Q", format="$,.0f")],
+    )
+    labels = alt.Chart(bar_df).mark_text(dy=-8, fontSize=13, fontWeight="bold").encode(
+        x=alt.X("Combination:N", sort=combo_labels),
+        y="Balance:Q",
+        text=alt.Text("Balance:Q", format="$,.2s"),
+    )
+
     st.markdown("**Projected balance at end of horizon, by combination**")
-    labels = list(combo_data.keys())
-    cols_per_row = 3
-    for start in range(0, len(labels), cols_per_row):
-        row_labels = labels[start:start + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for col, label in zip(cols, row_labels):
-            balance = combo_data[label].iloc[-1]
-            safe_label = html.escape(label)
-            col.markdown(
-                f"""
-                <div style="text-align:center; padding:10px 8px; margin-bottom:10px;
-                            border:1px solid rgba(128,128,128,0.3); border-radius:8px;">
-                    <div style="font-size:0.85rem; font-weight:600; line-height:1.35;
-                                margin-bottom:6px;">{safe_label}</div>
-                    <div style="font-size:1.2rem; font-weight:700;"
-                         title="${balance:,.0f}">{format_compact_currency(balance)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    st.altair_chart((bars + labels).properties(height=380), width="stretch")
 
 
 # ---------- UI ----------
