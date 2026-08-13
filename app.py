@@ -1,3 +1,4 @@
+import html
 import json
 import uuid
 from datetime import date
@@ -92,6 +93,43 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
     return pd.DataFrame(rows)
 
 
+def render_totals_row(person: dict, base_df: pd.DataFrame) -> None:
+    """Compact, small-font row of Base + scenario projected balances, with a
+    B/(W) dollar variance vs Base under each scenario."""
+    base_balance = base_df.iloc[-1]["Balance"]
+    entries = [("Base", base_balance, None, int(base_df.iloc[-1]["Age"]))]
+    for scenario in person["scenarios"]:
+        s_df = project_balance(person, {scenario["field"]: scenario["value"]})
+        s_balance = s_df.iloc[-1]["Balance"]
+        entries.append((scenario["name"], s_balance, s_balance - base_balance, int(s_df.iloc[-1]["Age"])))
+
+    cols = st.columns(len(entries))
+    for col, (name, balance, diff, end_age) in zip(cols, entries):
+        safe_name = html.escape(str(name))
+        if diff is None:
+            variance_html = "&nbsp;"
+            variance_color = "inherit"
+        else:
+            is_better = diff >= 0
+            variance_color = "#1a7f37" if is_better else "#cf222e"
+            sign = "B" if is_better else "(W)"
+            variance_html = f"{'▲' if is_better else '▼'} {format_compact_currency(abs(diff))} {sign}"
+        col.markdown(
+            f"""
+            <div style="text-align:center; line-height:1.3; padding:2px 1px;">
+                <div style="font-size:0.68rem; opacity:0.65; white-space:nowrap; overflow:hidden;
+                            text-overflow:ellipsis;" title="{safe_name}">{safe_name}</div>
+                <div style="font-size:1.0rem; font-weight:700; white-space:nowrap;"
+                     title="${balance:,.0f} at age {end_age}">{format_compact_currency(balance)}</div>
+                <div style="font-size:0.7rem; font-weight:600; color:{variance_color}; white-space:nowrap;">
+                    {variance_html}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 # ---------- UI ----------
 
 st.title("401(k) Planner")
@@ -177,12 +215,8 @@ else:
                     combined = pd.concat(chart_data, axis=1)
                     st.line_chart(combined)
 
-                    projected = df.iloc[-1]["Balance"]
-                    st.metric(
-                        f"Projected Balance at Age {person['retirement_age']} (Base)",
-                        format_compact_currency(projected),
-                        help=f"${projected:,.0f}",
-                    )
+                    st.caption("Projected balance at retirement")
+                    render_totals_row(person, df)
 
                     with st.popover("View year-by-year projection"):
                         st.dataframe(df, width="stretch", hide_index=True)
@@ -201,14 +235,8 @@ else:
 
             if person["scenarios"]:
                 for scenario in person["scenarios"]:
-                    s_df = project_balance(person, {scenario["field"]: scenario["value"]})
-                    end_balance = format_compact_currency(s_df.iloc[-1]["Balance"])
-                    end_age = int(s_df.iloc[-1]["Age"])
                     s_col, remove_col = st.columns([5, 1])
-                    s_col.markdown(
-                        f"**{scenario['name']}** — {scenario['detail']} — "
-                        f"{end_balance} at age {end_age}"
-                    )
+                    s_col.markdown(f"**{scenario['name']}** — {scenario['detail']}")
                     if remove_col.button("Remove", key=f"remove_scenario_{scenario['id']}"):
                         person["scenarios"] = [
                             s for s in person["scenarios"] if s["id"] != scenario["id"]
