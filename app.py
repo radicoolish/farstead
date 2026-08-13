@@ -26,6 +26,19 @@ def save_people(people: list[dict]) -> None:
 
 if "people" not in st.session_state:
     st.session_state.people = load_people()
+    for p in st.session_state.people:
+        p.setdefault("scenarios", [])
+
+
+# ---------- Scenario field config ----------
+# Fields a scenario is allowed to vary. Current balance, birthday, employer
+# match, current salary, and account type stay fixed from the base person.
+SCENARIO_FIELDS = {
+    "% of Salary Contributed": {"key": "contribution_pct", "min": 0.0, "max": 50.0, "step": 0.5, "percent": True},
+    "Annual Salary Increase (%)": {"key": "salary_increase_pct", "min": 0.0, "max": 15.0, "step": 0.25, "percent": True},
+    "Annual Growth Rate (%)": {"key": "growth_rate_pct", "min": 0.0, "max": 15.0, "step": 0.25, "percent": True},
+    "Retirement / Draw Age": {"key": "retirement_age", "min": 1, "max": 100, "step": 1, "percent": False},
+}
 
 
 # ---------- Helpers ----------
@@ -35,16 +48,18 @@ def calculate_age(birthday: date) -> int:
     return today.year - birthday.year - ((today.month, today.day) < (birthday.month, birthday.day))
 
 
-def project_balance(person: dict) -> pd.DataFrame:
-    age = calculate_age(date.fromisoformat(person["birthday"]))
-    years_to_grow = max(person["retirement_age"] - age, 0)
+def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame:
+    effective = {**person, **(overrides or {})}
 
-    balance = person["current_balance"]
-    salary = person["current_salary"]
-    contrib_pct = person["contribution_pct"] / 100
-    match_pct = person["match_pct"] / 100
-    salary_growth = person["salary_increase_pct"] / 100
-    growth_rate = person["growth_rate_pct"] / 100
+    age = calculate_age(date.fromisoformat(effective["birthday"]))
+    years_to_grow = max(effective["retirement_age"] - age, 0)
+
+    balance = effective["current_balance"]
+    salary = effective["current_salary"]
+    contrib_pct = effective["contribution_pct"] / 100
+    match_pct = effective["match_pct"] / 100
+    salary_growth = effective["salary_increase_pct"] / 100
+    growth_rate = effective["growth_rate_pct"] / 100
 
     rows = [{"Age": age, "Year": date.today().year, "Balance": round(balance, 2)}]
     for i in range(1, years_to_grow + 1):
@@ -103,6 +118,7 @@ with st.form("add_person_form", clear_on_submit=True):
                 "growth_rate_pct": growth_rate_pct,
                 "account_type": account_type,
                 "retirement_age": retirement_age,
+                "scenarios": [],
             })
             save_people(st.session_state.people)
             st.success(f"Added {name.strip()}.")
@@ -115,6 +131,7 @@ else:
     st.subheader("People")
 
     for person in list(st.session_state.people):
+        person.setdefault("scenarios", [])
         age = calculate_age(date.fromisoformat(person["birthday"]))
         with st.expander(f"{person['name']} — Age {age} — {person['account_type']}", expanded=False):
             info_col, action_col = st.columns([4, 1])
@@ -134,12 +151,26 @@ else:
 
                 df = project_balance(person)
                 if len(df) > 1:
-                    st.line_chart(df.set_index("Age")["Balance"])
+                    chart_data = {"Base": df.set_index("Age")["Balance"]}
+                    for scenario in person["scenarios"]:
+                        s_df = project_balance(person, {scenario["field"]: scenario["value"]})
+                        if len(s_df) > 1:
+                            chart_data[scenario["label"]] = s_df.set_index("Age")["Balance"]
+                    combined = pd.concat(chart_data, axis=1)
+                    st.line_chart(combined)
+
                     projected = df.iloc[-1]["Balance"]
                     st.metric(
-                        f"Projected Balance at Age {person['retirement_age']}",
+                        f"Projected Balance at Age {person['retirement_age']} (Base)",
                         f"${projected:,.0f}",
                     )
+                    if person["scenarios"]:
+                        cols = st.columns(len(person["scenarios"]))
+                        for col, scenario in zip(cols, person["scenarios"]):
+                            s_df = project_balance(person, {scenario["field"]: scenario["value"]})
+                            end_age = s_df.iloc[-1]["Age"]
+                            col.metric(f"{scenario['label']} (Age {end_age})", f"${s_df.iloc[-1]['Balance']:,.0f}")
+
                     with st.popover("View year-by-year projection"):
                         st.dataframe(df, width="stretch", hide_index=True)
                 else:
@@ -150,6 +181,76 @@ else:
                     st.session_state.people = [
                         p for p in st.session_state.people if p["id"] != person["id"]
                     ]
+                    save_people(st.session_state.people)
+                    st.rerun()
+
+            st.markdown("**Scenarios** — vary one assumption at a time and compare it to the base projection above.")
+
+            if person["scenarios"]:
+                for scenario in person["scenarios"]:
+                    s_col, remove_col = st.columns([5, 1])
+                    s_col.write(f"• {scenario['label']}")
+                    if remove_col.button("Remove", key=f"remove_scenario_{scenario['id']}"):
+                        person["scenarios"] = [
+                            s for s in person["scenarios"] if s["id"] != scenario["id"]
+                        ]
+                        save_people(st.session_state.people)
+                        st.rerun()
+
+            if len(person["scenarios"]) >= 4:
+                st.caption("Maximum of 4 scenarios reached. Remove one to add another.")
+            else:
+                field_label = st.selectbox(
+                    "What do you want to change?",
+                    list(SCENARIO_FIELDS.keys()),
+                    key=f"scenario_field_{person['id']}",
+                )
+                config = SCENARIO_FIELDS[field_label]
+                base_value = person[config["key"]]
+
+                min_value = config["min"]
+                if config["key"] == "retirement_age":
+                    min_value = age + 1
+                max_value = config["max"]
+                base_value = min(max(base_value, min_value), max_value)
+
+                input_col, method_col = st.columns([3, 2])
+                with method_col:
+                    input_method = st.radio(
+                        "Set value using",
+                        ["Slider", "Manual entry"],
+                        key=f"scenario_method_{person['id']}",
+                        horizontal=True,
+                    )
+                with input_col:
+                    widget_key = f"scenario_value_{person['id']}_{config['key']}_{input_method}"
+                    if input_method == "Slider":
+                        new_value = st.slider(
+                            field_label,
+                            min_value=float(min_value) if config["percent"] else int(min_value),
+                            max_value=float(max_value) if config["percent"] else int(max_value),
+                            value=float(base_value) if config["percent"] else int(base_value),
+                            step=config["step"],
+                            key=widget_key,
+                        )
+                    else:
+                        new_value = st.number_input(
+                            field_label,
+                            min_value=float(min_value) if config["percent"] else int(min_value),
+                            max_value=float(max_value) if config["percent"] else int(max_value),
+                            value=float(base_value) if config["percent"] else int(base_value),
+                            step=config["step"],
+                            key=widget_key,
+                        )
+
+                if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
+                    label = f"{field_label}: {new_value}{'%' if config['percent'] else ''}"
+                    person["scenarios"].append({
+                        "id": str(uuid.uuid4()),
+                        "field": config["key"],
+                        "value": new_value,
+                        "label": label,
+                    })
                     save_people(st.session_state.people)
                     st.rerun()
 
