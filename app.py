@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 DATA_FILE = Path(__file__).parent / "data" / "people.json"
+EXPENSES_FILE = Path(__file__).parent / "data" / "expenses.json"
 
 st.set_page_config(page_title="Investment Scenario Planner", layout="wide")
 
@@ -26,6 +27,17 @@ def load_people() -> list[dict]:
 def save_people(people: list[dict]) -> None:
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     DATA_FILE.write_text(json.dumps(people, indent=2, default=str))
+
+
+def load_expenses() -> list[dict]:
+    if EXPENSES_FILE.exists():
+        return json.loads(EXPENSES_FILE.read_text())
+    return []
+
+
+def save_expenses(expenses: list[dict]) -> None:
+    EXPENSES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    EXPENSES_FILE.write_text(json.dumps(expenses, indent=2, default=str))
 
 
 def normalize_scenarios(person: dict) -> list[dict]:
@@ -48,6 +60,9 @@ if "people" not in st.session_state:
     st.session_state.people = load_people()
     for p in st.session_state.people:
         normalize_person(p)
+
+if "expenses" not in st.session_state:
+    st.session_state.expenses = load_expenses()
 
 
 # ---------- Color palette ----------
@@ -75,6 +90,26 @@ SCENARIO_FIELDS = {
 # steps to a new, flat annual amount starting at a given age and stays
 # there (no further raises) through retirement.
 INCOME_CHANGE_LABEL = "Different Income Until Retirement"
+
+
+# ---------- Household expense config ----------
+EXPENSE_TYPES = [
+    "Mortgage", "Heloc/Loans", "Auto Loans", "Utilities", "Groceries",
+    "Health Insurance", "Property Taxes", "Life Insurance", "Student Loans",
+    "Gas", "529 / College Savings", "Daycare", "Other Costs",
+]
+# These get a Current Payment + Remaining Term instead of perpetuity/start-stop
+# and inflation — a fixed loan payment that automatically falls off once paid.
+LOAN_EXPENSE_TYPES = {"Mortgage", "Heloc/Loans", "Auto Loans", "Student Loans"}
+EXPENSE_HORIZON_AGE = 85
+
+
+def categorical_palette(n: int) -> list[str]:
+    """n distinct hues, evenly spaced around the color wheel."""
+    return [f"hsl({round(i * 360 / n)}, 55%, 52%)" for i in range(n)]
+
+
+EXPENSE_PALETTE = dict(zip(EXPENSE_TYPES, categorical_palette(len(EXPENSE_TYPES))))
 
 
 # ---------- Helpers ----------
@@ -354,6 +389,61 @@ def render_household_combo_bars(
     )
 
     st.altair_chart((bars + labels).properties(height=420), width="stretch")
+
+
+# ---------- Household expense helpers ----------
+
+def project_expense_annual_costs(expense: dict, current_age: int, horizon_age: int) -> dict[int, float]:
+    """{age: annual_cost} for age in current_age..horizon_age.
+
+    Loans are a fixed payment that stops once the remaining term elapses.
+    Everything else is either active the whole horizon (perpetuity) or only
+    between start_age/stop_age, with its monthly cost compounding by the
+    inflation rate every year from today regardless of when it's active —
+    a cost that starts 5 years from now is already 5 years' worth of
+    inflation higher by the time it kicks in.
+    """
+    results = {}
+    monthly = expense["monthly_amount"]
+    inflation_rate = (expense.get("inflation_rate") or 0.0) / 100 if expense.get("apply_inflation") else 0.0
+
+    for i, age in enumerate(range(current_age, horizon_age + 1)):
+        if expense.get("is_loan"):
+            active = i < (expense.get("remaining_term_years") or 0)
+            annual = monthly * 12 if active else 0.0
+        else:
+            if expense.get("is_perpetuity"):
+                active = True
+            else:
+                start_age, stop_age = expense.get("start_age"), expense.get("stop_age")
+                active = start_age is not None and stop_age is not None and start_age <= age <= stop_age
+            inflated_monthly = monthly * ((1 + inflation_rate) ** i)
+            annual = inflated_monthly * 12 if active else 0.0
+        results[age] = annual
+
+    return results
+
+
+def build_expense_chart_df(expenses: list[dict], current_age: int, horizon_age: int) -> pd.DataFrame:
+    """Long-format Age/Type/Cost, summed across expenses sharing a type."""
+    rows = [
+        {"Age": age, "Type": expense["type"], "Cost": cost}
+        for expense in expenses
+        for age, cost in project_expense_annual_costs(expense, current_age, horizon_age).items()
+        if cost > 0
+    ]
+    if not rows:
+        return pd.DataFrame(columns=["Age", "Type", "Cost"])
+    return pd.DataFrame(rows).groupby(["Age", "Type"], as_index=False)["Cost"].sum()
+
+
+def describe_expense(expense: dict) -> str:
+    monthly_txt = f"${expense['monthly_amount']:,.0f}/mo"
+    if expense.get("is_loan"):
+        return f"{monthly_txt} — loan, {expense.get('remaining_term_years', 0)} yrs remaining"
+    timing = "ongoing" if expense.get("is_perpetuity") else f"ages {expense.get('start_age')}–{expense.get('stop_age')}"
+    inflation_txt = f"{expense.get('inflation_rate', 0):.1f}% inflation" if expense.get("apply_inflation") else "no inflation"
+    return f"{monthly_txt} — {timing} — {inflation_txt}"
 
 
 # ---------- UI ----------
@@ -674,3 +764,133 @@ else:
         s3.metric("Maximum Scenario", "—", help="Too many scenario combinations to compute")
 
     render_household_combinations(combo_data, total_combos)
+
+
+# ==========================================================================
+# Section 2: Household Expenses
+# ==========================================================================
+
+st.divider()
+st.title("Household Expenses")
+st.caption(f"Section 2: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}")
+
+default_current_age = (
+    calculate_age(date.fromisoformat(st.session_state.people[0]["birthday"]))
+    if st.session_state.people else 35
+)
+current_age_for_expenses = st.number_input(
+    "Current Age (for this projection)",
+    min_value=1,
+    max_value=EXPENSE_HORIZON_AGE - 1,
+    value=min(default_current_age, EXPENSE_HORIZON_AGE - 1),
+    key="expenses_current_age",
+)
+
+with st.expander("Add an Expense", expanded=not st.session_state.expenses):
+    type_col, amount_col = st.columns(2)
+    with type_col:
+        expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
+    is_loan_type = expense_type in LOAN_EXPENSE_TYPES
+    with amount_col:
+        monthly_amount = st.number_input(
+            "Current Monthly Payment ($)" if is_loan_type else "Monthly Value ($)",
+            min_value=0.0, value=0.0, step=50.0, key="expense_monthly_amount",
+        )
+
+    is_perpetuity = True
+    start_age_input = None
+    stop_age_input = None
+    apply_inflation = False
+    inflation_rate = 0.0
+    remaining_term_years = None
+
+    if is_loan_type:
+        remaining_term_years = st.number_input(
+            "Remaining Term (Years)", min_value=0, max_value=50, value=15, step=1,
+            key="expense_remaining_term",
+        )
+        st.caption("Loan payments are fixed (no inflation) and fall off automatically once the term ends.")
+    else:
+        is_perpetuity = st.checkbox(
+            "Perpetuity (runs the whole projection)", value=True, key="expense_perpetuity"
+        )
+        if not is_perpetuity:
+            start_col, stop_col = st.columns(2)
+            with start_col:
+                start_age_input = st.number_input(
+                    "Start Age", min_value=1, max_value=100, value=int(current_age_for_expenses),
+                    key="expense_start_age",
+                )
+            with stop_col:
+                stop_age_input = st.number_input(
+                    "Stop Age", min_value=1, max_value=100,
+                    value=min(int(current_age_for_expenses) + 10, 100), key="expense_stop_age",
+                )
+        apply_inflation = st.checkbox("Apply Inflation", value=True, key="expense_apply_inflation")
+        if apply_inflation:
+            inflation_rate = st.number_input(
+                "Inflation Rate (%)", min_value=0.0, max_value=20.0, value=3.0, step=0.1,
+                key="expense_inflation_rate",
+            )
+
+    if st.button("Add Expense", key="add_expense_button"):
+        st.session_state.expenses.append({
+            "id": str(uuid.uuid4()),
+            "type": expense_type,
+            "monthly_amount": monthly_amount,
+            "is_loan": is_loan_type,
+            "remaining_term_years": remaining_term_years,
+            "is_perpetuity": is_perpetuity,
+            "start_age": start_age_input,
+            "stop_age": stop_age_input,
+            "apply_inflation": apply_inflation,
+            "inflation_rate": inflation_rate,
+        })
+        save_expenses(st.session_state.expenses)
+        st.rerun()
+
+st.divider()
+
+if not st.session_state.expenses:
+    st.info("No expenses added yet. Use the form above to add one.")
+else:
+    st.subheader("Expenses")
+    for expense in st.session_state.expenses:
+        e_col, remove_col = st.columns([5, 1])
+        e_col.markdown(f"**{expense['type']}** — {describe_expense(expense)}")
+        if remove_col.button("Remove", key=f"remove_expense_{expense['id']}"):
+            st.session_state.expenses = [
+                e for e in st.session_state.expenses if e["id"] != expense["id"]
+            ]
+            save_expenses(st.session_state.expenses)
+            st.rerun()
+
+    st.divider()
+    st.subheader("Projected Household Expenses")
+    expense_chart_df = build_expense_chart_df(
+        st.session_state.expenses, int(current_age_for_expenses), EXPENSE_HORIZON_AGE
+    )
+    if expense_chart_df.empty:
+        st.info("No active expenses in the selected age range.")
+    else:
+        expense_chart = (
+            alt.Chart(expense_chart_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("Age:O", title="Age"),
+                y=alt.Y("Cost:Q", title="Annual Cost ($)", stack="zero", axis=alt.Axis(format="$,.2s")),
+                color=alt.Color(
+                    "Type:N",
+                    scale=alt.Scale(domain=EXPENSE_TYPES, range=[EXPENSE_PALETTE[t] for t in EXPENSE_TYPES]),
+                    sort=EXPENSE_TYPES,
+                    legend=alt.Legend(title=None, orient="bottom", labelLimit=200, labelFontSize=12, columns=4),
+                ),
+                tooltip=[
+                    alt.Tooltip("Age:O"),
+                    alt.Tooltip("Type:N"),
+                    alt.Tooltip("Cost:Q", format="$,.0f"),
+                ],
+            )
+            .properties(height=440)
+        )
+        st.altair_chart(expense_chart, width="stretch")
