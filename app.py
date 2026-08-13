@@ -99,9 +99,12 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
     age = calculate_age(date.fromisoformat(effective["birthday"]))
     years_to_grow = max(effective["retirement_age"] - age, 0)
     stop_contribution_age = effective.get("stop_contribution_age", effective["retirement_age"])
-    # {"age": int, "new_salary": float} when a "Different Income Until
-    # Retirement" scenario is active, else None.
+    # {"age", "new_salary", and optionally "contribution_pct"/"match_pct"/
+    # "salary_increase_pct"} when a "Different Income Until Retirement"
+    # scenario is active, else None. Missing rate keys (older saved
+    # scenarios) fall back to the person's own current rates.
     income_change = effective.get("income_change")
+    income_triggered = False
 
     balance = effective["current_balance"]
     salary = effective["current_salary"]
@@ -109,23 +112,24 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
     match_pct = effective["match_pct"] / 100
     salary_growth = effective["salary_increase_pct"] / 100
     growth_rate = effective["growth_rate_pct"] / 100
-    income_changed = False
 
     rows = [{"Age": age, "Year": date.today().year, "Balance": round(balance, 2)}]
     for i in range(1, years_to_grow + 1):
         current_age = age + i
-        if income_change and current_age >= income_change["age"]:
-            # Income steps to the new amount and holds flat (no further
-            # raises) for the rest of the projection.
+        if income_change and not income_triggered and current_age >= income_change["age"]:
+            # Income (and optionally contribution/match/raise rates) steps
+            # to the new values once, then compounds normally from there.
             salary = income_change["new_salary"]
-            income_changed = True
+            contrib_pct = income_change.get("contribution_pct", effective["contribution_pct"]) / 100
+            match_pct = income_change.get("match_pct", effective["match_pct"]) / 100
+            salary_growth = income_change.get("salary_increase_pct", effective["salary_increase_pct"]) / 100
+            income_triggered = True
         if current_age <= stop_contribution_age:
             annual_contribution = salary * (contrib_pct + match_pct)
         else:
             annual_contribution = 0.0
         balance = balance * (1 + growth_rate) + annual_contribution
-        if not income_changed:
-            salary = salary * (1 + salary_growth)
+        salary = salary * (1 + salary_growth)
         rows.append({
             "Age": current_age,
             "Year": date.today().year + i,
@@ -543,17 +547,53 @@ else:
                             step=1000.0,
                             key=f"income_change_salary_{person['id']}",
                         )
-                    st.caption("Income holds at this new amount (no further raises) from that age through retirement.")
+
+                    contrib_col, match_col, raise_col = st.columns(3)
+                    with contrib_col:
+                        new_contribution_pct = st.number_input(
+                            "New % of Salary Contributed",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=float(person["contribution_pct"]),
+                            key=f"income_change_contrib_{person['id']}",
+                        )
+                    with match_col:
+                        new_match_pct = st.number_input(
+                            "New % of Salary Matched",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=float(person["match_pct"]),
+                            key=f"income_change_match_{person['id']}",
+                        )
+                    with raise_col:
+                        new_salary_increase_pct = st.number_input(
+                            "New Annual Salary Increase (%)",
+                            min_value=0.0,
+                            max_value=50.0,
+                            value=float(person["salary_increase_pct"]),
+                            key=f"income_change_raise_{person['id']}",
+                        )
+                    st.caption(
+                        "Salary, contribution %, match %, and raise assumption all switch to these values "
+                        "at that age and carry through to retirement. Leave a field as-is to keep it unchanged."
+                    )
 
                     if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
                         detail = (
-                            f"Income becomes {format_compact_currency(new_salary)}/yr at age {change_age} "
-                            f"(flat through retirement)"
+                            f"At age {change_age}: income → {format_compact_currency(new_salary)}/yr, "
+                            f"{new_contribution_pct:.1f}% contributed, {new_match_pct:.1f}% match, "
+                            f"{new_salary_increase_pct:.1f}% raises"
                         )
                         person["scenarios"].append({
                             "id": str(uuid.uuid4()),
                             "field": "income_change",
-                            "value": {"age": change_age, "new_salary": new_salary},
+                            "value": {
+                                "age": change_age,
+                                "new_salary": new_salary,
+                                "contribution_pct": new_contribution_pct,
+                                "match_pct": new_match_pct,
+                                "salary_increase_pct": new_salary_increase_pct,
+                            },
                             "name": scenario_name.strip() or f"Scenario {len(person['scenarios']) + 1}",
                             "detail": detail,
                         })
