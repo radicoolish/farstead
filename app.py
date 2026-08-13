@@ -195,9 +195,9 @@ def render_household_combinations(people: list[dict]) -> None:
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
 
     combo_labels = list(combo_data.keys())
-    # Shared scale + legend so colors and legend layout match between the
-    # line chart and the bar chart below it. No `columns` limit is set, so
-    # Vega keeps the legend on a single row instead of wrapping.
+    # Shared scale so colors match between the line chart and the bar chart
+    # next to it. Only the line chart keeps a legend (single row, no
+    # `columns` limit) so there's one legend for both instead of two.
     color_scale = alt.Scale(domain=combo_labels)
     legend = alt.Legend(title=None, orient="bottom", labelLimit=500, labelFontSize=13)
 
@@ -222,39 +222,41 @@ def render_household_combinations(people: list[dict]) -> None:
         )
         .properties(height=420)
     )
-    st.altair_chart(line_chart, width="stretch")
 
-    render_household_combo_bars(combo_data, combo_labels, color_scale, legend)
+    line_col, bar_col = st.columns([3, 2])
+    with line_col:
+        st.altair_chart(line_chart, width="stretch")
+    with bar_col:
+        render_household_combo_bars(combo_data, combo_labels, color_scale)
 
 
 def render_household_combo_bars(
     combo_data: dict[str, pd.Series],
     combo_labels: list[str],
     color_scale: alt.Scale,
-    legend: alt.Legend,
 ) -> None:
     """Bar chart of each combination's final projected balance, colored to
-    match the line chart above (same scale/legend, x-axis labels hidden
-    since the legend already identifies each bar)."""
+    match the line chart next to it (same scale, no legend of its own),
+    with each bar labeled in millions of dollars."""
     bar_df = pd.DataFrame({
         "Combination": combo_labels,
         "Balance": [combo_data[label].iloc[-1] for label in combo_labels],
     })
+    bar_df["Label"] = bar_df["Balance"].apply(format_compact_currency)
 
     bars = alt.Chart(bar_df).mark_bar().encode(
         x=alt.X("Combination:N", sort=combo_labels, axis=None, title=None),
         y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
-        color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=legend),
+        color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=None),
         tooltip=[alt.Tooltip("Combination:N"), alt.Tooltip("Balance:Q", format="$,.0f")],
     )
     labels = alt.Chart(bar_df).mark_text(dy=-8, fontSize=13, fontWeight="bold").encode(
         x=alt.X("Combination:N", sort=combo_labels),
         y="Balance:Q",
-        text=alt.Text("Balance:Q", format="$,.2s"),
+        text="Label:N",
     )
 
-    st.markdown("**Projected balance at end of horizon, by combination**")
-    st.altair_chart((bars + labels).properties(height=380), width="stretch")
+    st.altair_chart((bars + labels).properties(height=420), width="stretch")
 
 
 # ---------- UI ----------
