@@ -268,21 +268,27 @@ def render_household_combo_bars(
 ) -> None:
     """Bar chart of each combination's final projected balance, colored to
     match the line chart next to it (same scale, no legend of its own),
-    with each bar labeled in millions of dollars."""
+    ordered highest to lowest, with each bar labeled in millions of dollars."""
+    order_desc = sorted(combo_labels, key=lambda label: combo_data[label].iloc[-1], reverse=True)
     bar_df = pd.DataFrame({
-        "Combination": combo_labels,
-        "Balance": [combo_data[label].iloc[-1] for label in combo_labels],
+        "Combination": order_desc,
+        "Balance": [combo_data[label].iloc[-1] for label in order_desc],
     })
     bar_df["Label"] = bar_df["Balance"].apply(format_compact_currency)
+    # Headroom above the tallest bar so its value label isn't clipped.
+    y_max = bar_df["Balance"].max() * 1.15
 
     bars = alt.Chart(bar_df).mark_bar().encode(
-        x=alt.X("Combination:N", sort=combo_labels, axis=None, title=None),
-        y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
-        color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=None),
+        x=alt.X("Combination:N", sort=order_desc, axis=None, title=None),
+        y=alt.Y(
+            "Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s"),
+            scale=alt.Scale(domain=[0, y_max]),
+        ),
+        color=alt.Color("Combination:N", scale=color_scale, sort=order_desc, legend=None),
         tooltip=[alt.Tooltip("Combination:N"), alt.Tooltip("Balance:Q", format="$,.0f")],
     )
-    labels = alt.Chart(bar_df).mark_text(dy=-8, fontSize=13, fontWeight="bold").encode(
-        x=alt.X("Combination:N", sort=combo_labels),
+    labels = alt.Chart(bar_df).mark_text(dy=-10, fontSize=13, fontWeight="bold").encode(
+        x=alt.X("Combination:N", sort=order_desc),
         y="Balance:Q",
         text="Label:N",
     )
