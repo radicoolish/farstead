@@ -68,7 +68,13 @@ SCENARIO_FIELDS = {
     "Annual Salary Increase (%)": {"key": "salary_increase_pct", "min": 0.0, "max": 15.0, "step": 0.25, "percent": True},
     "Annual Growth Rate (%)": {"key": "growth_rate_pct", "min": 0.0, "max": 15.0, "step": 0.25, "percent": True},
     "Retirement / Draw Age": {"key": "retirement_age", "min": 1, "max": 100, "step": 1, "percent": False},
+    "Stop Contribution Age": {"key": "stop_contribution_age", "min": 1, "max": 100, "step": 1, "percent": False},
 }
+
+# A scenario type that isn't a simple single-field override: the income
+# steps to a new, flat annual amount starting at a given age and stays
+# there (no further raises) through retirement.
+INCOME_CHANGE_LABEL = "Different Income Until Retirement"
 
 
 # ---------- Helpers ----------
@@ -93,6 +99,9 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
     age = calculate_age(date.fromisoformat(effective["birthday"]))
     years_to_grow = max(effective["retirement_age"] - age, 0)
     stop_contribution_age = effective.get("stop_contribution_age", effective["retirement_age"])
+    # {"age": int, "new_salary": float} when a "Different Income Until
+    # Retirement" scenario is active, else None.
+    income_change = effective.get("income_change")
 
     balance = effective["current_balance"]
     salary = effective["current_salary"]
@@ -100,16 +109,23 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
     match_pct = effective["match_pct"] / 100
     salary_growth = effective["salary_increase_pct"] / 100
     growth_rate = effective["growth_rate_pct"] / 100
+    income_changed = False
 
     rows = [{"Age": age, "Year": date.today().year, "Balance": round(balance, 2)}]
     for i in range(1, years_to_grow + 1):
         current_age = age + i
+        if income_change and current_age >= income_change["age"]:
+            # Income steps to the new amount and holds flat (no further
+            # raises) for the rest of the projection.
+            salary = income_change["new_salary"]
+            income_changed = True
         if current_age <= stop_contribution_age:
             annual_contribution = salary * (contrib_pct + match_pct)
         else:
             annual_contribution = 0.0
         balance = balance * (1 + growth_rate) + annual_contribution
-        salary = salary * (1 + salary_growth)
+        if not income_changed:
+            salary = salary * (1 + salary_growth)
         rows.append({
             "Age": current_age,
             "Year": date.today().year + i,
@@ -503,58 +519,96 @@ else:
                 with field_col:
                     field_label = st.selectbox(
                         "What do you want to change?",
-                        list(SCENARIO_FIELDS.keys()),
+                        list(SCENARIO_FIELDS.keys()) + [INCOME_CHANGE_LABEL],
                         key=f"scenario_field_{person['id']}",
                     )
-                config = SCENARIO_FIELDS[field_label]
-                base_value = person[config["key"]]
 
-                min_value = config["min"]
-                if config["key"] == "retirement_age":
-                    min_value = age + 1
-                max_value = config["max"]
-                base_value = min(max(base_value, min_value), max_value)
-
-                input_col, method_col = st.columns([3, 2])
-                with method_col:
-                    input_method = st.radio(
-                        "Set value using",
-                        ["Slider", "Manual entry"],
-                        key=f"scenario_method_{person['id']}",
-                        horizontal=True,
-                    )
-                with input_col:
-                    widget_key = f"scenario_value_{person['id']}_{config['key']}_{input_method}"
-                    if input_method == "Slider":
-                        new_value = st.slider(
-                            field_label,
-                            min_value=float(min_value) if config["percent"] else int(min_value),
-                            max_value=float(max_value) if config["percent"] else int(max_value),
-                            value=float(base_value) if config["percent"] else int(base_value),
-                            step=config["step"],
-                            key=widget_key,
+                if field_label == INCOME_CHANGE_LABEL:
+                    age_min = age + 1
+                    age_max = max(age_min, int(person["retirement_age"]))
+                    age_col, salary_col = st.columns(2)
+                    with age_col:
+                        change_age = st.number_input(
+                            "Age When Income Changes",
+                            min_value=age_min,
+                            max_value=age_max,
+                            value=min(age_min + 4, age_max),
+                            key=f"income_change_age_{person['id']}",
                         )
-                    else:
-                        new_value = st.number_input(
-                            field_label,
-                            min_value=float(min_value) if config["percent"] else int(min_value),
-                            max_value=float(max_value) if config["percent"] else int(max_value),
-                            value=float(base_value) if config["percent"] else int(base_value),
-                            step=config["step"],
-                            key=widget_key,
+                    with salary_col:
+                        new_salary = st.number_input(
+                            "New Annual Salary ($)",
+                            min_value=0.0,
+                            value=float(person["current_salary"]),
+                            step=1000.0,
+                            key=f"income_change_salary_{person['id']}",
                         )
+                    st.caption("Income holds at this new amount (no further raises) from that age through retirement.")
 
-                if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
-                    detail = f"{field_label}: {new_value}{'%' if config['percent'] else ''}"
-                    person["scenarios"].append({
-                        "id": str(uuid.uuid4()),
-                        "field": config["key"],
-                        "value": new_value,
-                        "name": scenario_name.strip() or f"Scenario {len(person['scenarios']) + 1}",
-                        "detail": detail,
-                    })
-                    save_people(st.session_state.people)
-                    st.rerun()
+                    if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
+                        detail = (
+                            f"Income becomes {format_compact_currency(new_salary)}/yr at age {change_age} "
+                            f"(flat through retirement)"
+                        )
+                        person["scenarios"].append({
+                            "id": str(uuid.uuid4()),
+                            "field": "income_change",
+                            "value": {"age": change_age, "new_salary": new_salary},
+                            "name": scenario_name.strip() or f"Scenario {len(person['scenarios']) + 1}",
+                            "detail": detail,
+                        })
+                        save_people(st.session_state.people)
+                        st.rerun()
+                else:
+                    config = SCENARIO_FIELDS[field_label]
+                    base_value = person[config["key"]]
+
+                    min_value = config["min"]
+                    if config["key"] in ("retirement_age", "stop_contribution_age"):
+                        min_value = age + 1
+                    max_value = config["max"]
+                    base_value = min(max(base_value, min_value), max_value)
+
+                    input_col, method_col = st.columns([3, 2])
+                    with method_col:
+                        input_method = st.radio(
+                            "Set value using",
+                            ["Slider", "Manual entry"],
+                            key=f"scenario_method_{person['id']}",
+                            horizontal=True,
+                        )
+                    with input_col:
+                        widget_key = f"scenario_value_{person['id']}_{config['key']}_{input_method}"
+                        if input_method == "Slider":
+                            new_value = st.slider(
+                                field_label,
+                                min_value=float(min_value) if config["percent"] else int(min_value),
+                                max_value=float(max_value) if config["percent"] else int(max_value),
+                                value=float(base_value) if config["percent"] else int(base_value),
+                                step=config["step"],
+                                key=widget_key,
+                            )
+                        else:
+                            new_value = st.number_input(
+                                field_label,
+                                min_value=float(min_value) if config["percent"] else int(min_value),
+                                max_value=float(max_value) if config["percent"] else int(max_value),
+                                value=float(base_value) if config["percent"] else int(base_value),
+                                step=config["step"],
+                                key=widget_key,
+                            )
+
+                    if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
+                        detail = f"{field_label}: {new_value}{'%' if config['percent'] else ''}"
+                        person["scenarios"].append({
+                            "id": str(uuid.uuid4()),
+                            "field": config["key"],
+                            "value": new_value,
+                            "name": scenario_name.strip() or f"Scenario {len(person['scenarios']) + 1}",
+                            "detail": detail,
+                        })
+                        save_people(st.session_state.people)
+                        st.rerun()
 
     st.divider()
     st.subheader("Household Summary")
