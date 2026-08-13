@@ -24,10 +24,19 @@ def save_people(people: list[dict]) -> None:
     DATA_FILE.write_text(json.dumps(people, indent=2, default=str))
 
 
+def normalize_scenarios(person: dict) -> list[dict]:
+    scenarios = person.setdefault("scenarios", [])
+    for i, scenario in enumerate(scenarios):
+        if "name" not in scenario:
+            scenario["name"] = f"Scenario {i + 1}"
+        scenario.setdefault("detail", scenario.get("label", scenario["name"]))
+    return scenarios
+
+
 if "people" not in st.session_state:
     st.session_state.people = load_people()
     for p in st.session_state.people:
-        p.setdefault("scenarios", [])
+        normalize_scenarios(p)
 
 
 # ---------- Scenario field config ----------
@@ -46,6 +55,15 @@ SCENARIO_FIELDS = {
 def calculate_age(birthday: date) -> int:
     today = date.today()
     return today.year - birthday.year - ((today.month, today.day) < (birthday.month, birthday.day))
+
+
+def format_compact_currency(value: float) -> str:
+    abs_value = abs(value)
+    if abs_value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}MM"
+    if abs_value >= 1_000:
+        return f"${value / 1_000:.0f}K"
+    return f"${value:,.0f}"
 
 
 def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame:
@@ -131,7 +149,7 @@ else:
     st.subheader("People")
 
     for person in list(st.session_state.people):
-        person.setdefault("scenarios", [])
+        normalize_scenarios(person)
         age = calculate_age(date.fromisoformat(person["birthday"]))
         with st.expander(f"{person['name']} — Age {age} — {person['account_type']}", expanded=False):
             info_col, action_col = st.columns([4, 1])
@@ -155,21 +173,16 @@ else:
                     for scenario in person["scenarios"]:
                         s_df = project_balance(person, {scenario["field"]: scenario["value"]})
                         if len(s_df) > 1:
-                            chart_data[scenario["label"]] = s_df.set_index("Age")["Balance"]
+                            chart_data[scenario["name"]] = s_df.set_index("Age")["Balance"]
                     combined = pd.concat(chart_data, axis=1)
                     st.line_chart(combined)
 
                     projected = df.iloc[-1]["Balance"]
                     st.metric(
                         f"Projected Balance at Age {person['retirement_age']} (Base)",
-                        f"${projected:,.0f}",
+                        format_compact_currency(projected),
+                        help=f"${projected:,.0f}",
                     )
-                    if person["scenarios"]:
-                        cols = st.columns(len(person["scenarios"]))
-                        for col, scenario in zip(cols, person["scenarios"]):
-                            s_df = project_balance(person, {scenario["field"]: scenario["value"]})
-                            end_age = s_df.iloc[-1]["Age"]
-                            col.metric(f"{scenario['label']} (Age {end_age})", f"${s_df.iloc[-1]['Balance']:,.0f}")
 
                     with st.popover("View year-by-year projection"):
                         st.dataframe(df, width="stretch", hide_index=True)
@@ -188,8 +201,14 @@ else:
 
             if person["scenarios"]:
                 for scenario in person["scenarios"]:
+                    s_df = project_balance(person, {scenario["field"]: scenario["value"]})
+                    end_balance = format_compact_currency(s_df.iloc[-1]["Balance"])
+                    end_age = int(s_df.iloc[-1]["Age"])
                     s_col, remove_col = st.columns([5, 1])
-                    s_col.write(f"• {scenario['label']}")
+                    s_col.markdown(
+                        f"**{scenario['name']}** — {scenario['detail']} — "
+                        f"{end_balance} at age {end_age}"
+                    )
                     if remove_col.button("Remove", key=f"remove_scenario_{scenario['id']}"):
                         person["scenarios"] = [
                             s for s in person["scenarios"] if s["id"] != scenario["id"]
@@ -200,11 +219,19 @@ else:
             if len(person["scenarios"]) >= 4:
                 st.caption("Maximum of 4 scenarios reached. Remove one to add another.")
             else:
-                field_label = st.selectbox(
-                    "What do you want to change?",
-                    list(SCENARIO_FIELDS.keys()),
-                    key=f"scenario_field_{person['id']}",
-                )
+                name_col, field_col = st.columns([2, 3])
+                with name_col:
+                    scenario_name = st.text_input(
+                        "Scenario Name",
+                        key=f"scenario_name_{person['id']}",
+                        placeholder=f"Scenario {len(person['scenarios']) + 1}",
+                    )
+                with field_col:
+                    field_label = st.selectbox(
+                        "What do you want to change?",
+                        list(SCENARIO_FIELDS.keys()),
+                        key=f"scenario_field_{person['id']}",
+                    )
                 config = SCENARIO_FIELDS[field_label]
                 base_value = person[config["key"]]
 
@@ -244,12 +271,13 @@ else:
                         )
 
                 if st.button("Add Scenario", key=f"add_scenario_{person['id']}"):
-                    label = f"{field_label}: {new_value}{'%' if config['percent'] else ''}"
+                    detail = f"{field_label}: {new_value}{'%' if config['percent'] else ''}"
                     person["scenarios"].append({
                         "id": str(uuid.uuid4()),
                         "field": config["key"],
                         "value": new_value,
-                        "label": label,
+                        "name": scenario_name.strip() or f"Scenario {len(person['scenarios']) + 1}",
+                        "detail": detail,
                     })
                     save_people(st.session_state.people)
                     st.rerun()
@@ -259,5 +287,9 @@ else:
     total_current = sum(p["current_balance"] for p in st.session_state.people)
     total_projected = sum(project_balance(p).iloc[-1]["Balance"] for p in st.session_state.people)
     s1, s2 = st.columns(2)
-    s1.metric("Combined Current Balance", f"${total_current:,.0f}")
-    s2.metric("Combined Projected Balance at Retirement", f"${total_projected:,.0f}")
+    s1.metric("Combined Current Balance", format_compact_currency(total_current), help=f"${total_current:,.0f}")
+    s2.metric(
+        "Combined Projected Balance at Retirement",
+        format_compact_currency(total_projected),
+        help=f"${total_projected:,.0f}",
+    )
