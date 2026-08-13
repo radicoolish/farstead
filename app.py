@@ -135,49 +135,51 @@ def render_totals_row(person: dict, base_df: pd.DataFrame) -> None:
 st.title("401(k) Planner")
 st.caption("Section 1: Individual 401(k) inputs and balance projection")
 
-with st.form("add_person_form", clear_on_submit=True):
-    st.subheader("Add a Person")
-    col1, col2, col3 = st.columns(3)
+with st.expander("Add a Person", expanded=not st.session_state.people):
+    with st.form("add_person_form", clear_on_submit=True):
+        col1, col2, col3 = st.columns(3)
 
-    with col1:
-        name = st.text_input("Name")
-        birthday = st.date_input(
-            "Birthday", value=date(1990, 1, 1), min_value=date(1930, 1, 1), max_value=date.today()
-        )
-        retirement_age = st.number_input("Retirement / Draw Age", min_value=1, max_value=100, value=65)
+        with col1:
+            name = st.text_input("Name")
+            birthday = st.date_input(
+                "Birthday", value=date(1990, 1, 1), min_value=date(1930, 1, 1), max_value=date.today()
+            )
+            retirement_age = st.number_input("Retirement / Draw Age", min_value=1, max_value=100, value=65)
 
-    with col2:
-        current_balance = st.number_input("Current 401(k) Balance ($)", min_value=0.0, value=0.0, step=1000.0)
-        current_salary = st.number_input("Current Annual Salary ($)", min_value=0.0, value=0.0, step=1000.0)
-        account_type = st.radio("Account Type", ["Pre-tax", "Roth"], horizontal=True)
+        with col2:
+            current_balance = st.number_input("Current 401(k) Balance ($)", min_value=0.0, value=0.0, step=1000.0)
+            current_salary = st.number_input("Current Annual Salary ($)", min_value=0.0, value=0.0, step=1000.0)
+            account_type = st.radio("Account Type", ["Pre-tax", "Roth"], horizontal=True)
 
-    with col3:
-        contribution_pct = st.number_input("% of Salary Contributed", min_value=0.0, max_value=100.0, value=6.0)
-        match_pct = st.number_input("% of Salary Matched", min_value=0.0, max_value=100.0, value=3.0)
-        salary_increase_pct = st.number_input("Annual Salary Increase (%)", min_value=0.0, max_value=50.0, value=3.0)
-        growth_rate_pct = st.number_input("Annual Growth Rate (%)", min_value=0.0, max_value=50.0, value=7.0)
+        with col3:
+            contribution_pct = st.number_input("% of Salary Contributed", min_value=0.0, max_value=100.0, value=6.0)
+            match_pct = st.number_input("% of Salary Matched", min_value=0.0, max_value=100.0, value=3.0)
+            salary_increase_pct = st.number_input(
+                "Annual Salary Increase (%)", min_value=0.0, max_value=50.0, value=3.0
+            )
+            growth_rate_pct = st.number_input("Annual Growth Rate (%)", min_value=0.0, max_value=50.0, value=7.0)
 
-    submitted = st.form_submit_button("Add Person")
-    if submitted:
-        if not name.strip():
-            st.error("Name is required.")
-        else:
-            st.session_state.people.append({
-                "id": str(uuid.uuid4()),
-                "name": name.strip(),
-                "birthday": birthday.isoformat(),
-                "current_balance": current_balance,
-                "current_salary": current_salary,
-                "contribution_pct": contribution_pct,
-                "match_pct": match_pct,
-                "salary_increase_pct": salary_increase_pct,
-                "growth_rate_pct": growth_rate_pct,
-                "account_type": account_type,
-                "retirement_age": retirement_age,
-                "scenarios": [],
-            })
-            save_people(st.session_state.people)
-            st.success(f"Added {name.strip()}.")
+        submitted = st.form_submit_button("Add Person")
+        if submitted:
+            if not name.strip():
+                st.error("Name is required.")
+            else:
+                st.session_state.people.append({
+                    "id": str(uuid.uuid4()),
+                    "name": name.strip(),
+                    "birthday": birthday.isoformat(),
+                    "current_balance": current_balance,
+                    "current_salary": current_salary,
+                    "contribution_pct": contribution_pct,
+                    "match_pct": match_pct,
+                    "salary_increase_pct": salary_increase_pct,
+                    "growth_rate_pct": growth_rate_pct,
+                    "account_type": account_type,
+                    "retirement_age": retirement_age,
+                    "scenarios": [],
+                })
+                save_people(st.session_state.people)
+                st.success(f"Added {name.strip()}.")
 
 st.divider()
 
