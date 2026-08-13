@@ -37,10 +37,17 @@ def normalize_scenarios(person: dict) -> list[dict]:
     return scenarios
 
 
+def normalize_person(person: dict) -> None:
+    normalize_scenarios(person)
+    # Stop Contribution Age defaults to retirement age for people saved
+    # before this field existed.
+    person.setdefault("stop_contribution_age", person["retirement_age"])
+
+
 if "people" not in st.session_state:
     st.session_state.people = load_people()
     for p in st.session_state.people:
-        normalize_scenarios(p)
+        normalize_person(p)
 
 
 # ---------- Color palette ----------
@@ -85,6 +92,7 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
 
     age = calculate_age(date.fromisoformat(effective["birthday"]))
     years_to_grow = max(effective["retirement_age"] - age, 0)
+    stop_contribution_age = effective.get("stop_contribution_age", effective["retirement_age"])
 
     balance = effective["current_balance"]
     salary = effective["current_salary"]
@@ -95,11 +103,15 @@ def project_balance(person: dict, overrides: dict | None = None) -> pd.DataFrame
 
     rows = [{"Age": age, "Year": date.today().year, "Balance": round(balance, 2)}]
     for i in range(1, years_to_grow + 1):
-        annual_contribution = salary * (contrib_pct + match_pct)
+        current_age = age + i
+        if current_age <= stop_contribution_age:
+            annual_contribution = salary * (contrib_pct + match_pct)
+        else:
+            annual_contribution = 0.0
         balance = balance * (1 + growth_rate) + annual_contribution
         salary = salary * (1 + salary_growth)
         rows.append({
-            "Age": age + i,
+            "Age": current_age,
             "Year": date.today().year + i,
             "Balance": round(balance, 2),
         })
@@ -339,6 +351,10 @@ with st.expander("Add a Person", expanded=not st.session_state.people):
                 "Birthday", value=date(1990, 1, 1), min_value=date(1930, 1, 1), max_value=date.today()
             )
             retirement_age = st.number_input("Retirement / Draw Age", min_value=1, max_value=100, value=65)
+            stop_contribution_age = st.number_input(
+                "Stop Contribution Age", min_value=1, max_value=100, value=65,
+                help="Age at which contributions and the employer match stop. Defaults to retirement age.",
+            )
 
         with col2:
             current_balance = st.number_input("Current 401(k) Balance ($)", min_value=0.0, value=0.0, step=1000.0)
@@ -370,6 +386,7 @@ with st.expander("Add a Person", expanded=not st.session_state.people):
                     "growth_rate_pct": growth_rate_pct,
                     "account_type": account_type,
                     "retirement_age": retirement_age,
+                    "stop_contribution_age": stop_contribution_age,
                     "scenarios": [],
                 })
                 save_people(st.session_state.people)
@@ -383,19 +400,24 @@ else:
     st.subheader("People")
 
     for person in list(st.session_state.people):
-        normalize_scenarios(person)
+        normalize_person(person)
         age = calculate_age(date.fromisoformat(person["birthday"]))
         with st.expander(f"{person['name']} — Age {age} — {person['account_type']}", expanded=False):
             header_col, action_col = st.columns([5, 1])
 
             with header_col:
-                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
                 m1.metric("Current Balance", f"${person['current_balance']:,.0f}")
                 m2.metric("Current Salary", f"${person['current_salary']:,.0f}")
                 m3.metric("Contribution + Match", f"{person['contribution_pct'] + person['match_pct']:.1f}%")
                 m4.metric("Retirement Age", person["retirement_age"])
-                m5.metric("Salary Increase", f"{person['salary_increase_pct']}%")
-                m6.metric("Growth Rate", f"{person['growth_rate_pct']}%")
+                m5.metric(
+                    "Stops Contributing",
+                    person["stop_contribution_age"],
+                    help="Age contributions and employer match stop",
+                )
+                m6.metric("Salary Increase", f"{person['salary_increase_pct']}%")
+                m7.metric("Growth Rate", f"{person['growth_rate_pct']}%")
 
                 st.caption(f"Account type: {person['account_type']}")
 
