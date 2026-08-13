@@ -202,11 +202,15 @@ def render_household_combinations(people: list[dict]) -> None:
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
 
     combo_labels = list(combo_data.keys())
-    # Shared green-shades scale so colors match between the line chart and
-    # the bar chart next to it. Neither chart renders its own legend — a
-    # single custom legend is drawn below both instead.
-    green_colors = green_palette(len(combo_labels))
-    color_scale = alt.Scale(domain=combo_labels, range=green_colors)
+    # Shared green-shades scale, assigned by each combination's final balance
+    # (not by list order) so higher projected balances get darker green.
+    # Neither chart renders its own legend — a single custom legend is drawn
+    # below both instead.
+    labels_by_value = sorted(combo_labels, key=lambda label: combo_data[label].iloc[-1])
+    shades_by_value = green_palette(len(labels_by_value))
+    color_scale = alt.Scale(domain=labels_by_value, range=shades_by_value)
+    label_to_color = dict(zip(labels_by_value, shades_by_value))
+    green_colors = [label_to_color[label] for label in combo_labels]
 
     long_df = (
         pd.concat(combo_data, axis=1)
