@@ -178,9 +178,11 @@ def green_palette(n: int) -> list[str]:
     return [f"hsl(152, 45%, {78 - (i / (n - 1)) * 56:.0f}%)" for i in range(n)]
 
 
-def render_household_combinations(people: list[dict]) -> None:
-    """Draw every combination of each person's Base/scenarios summed together,
-    e.g. 3 options for one person x 3 for another = 9 combined household lines."""
+def build_household_combo_data(people: list[dict]) -> tuple[dict[str, pd.Series], int]:
+    """Every combination of each person's Base/scenarios, summed together,
+    e.g. 3 options for one person x 3 for another = 9 combined household
+    series. Returns ({}, total_combos) if there are too many to compute
+    for a clear chart."""
     per_person_choices = [
         [(person, name, overrides) for name, overrides in person_scenario_options(person)]
         for person in people
@@ -190,11 +192,7 @@ def render_household_combinations(people: list[dict]) -> None:
         total_combos *= len(choices)
 
     if total_combos > MAX_HOUSEHOLD_COMBOS:
-        st.caption(
-            f"{total_combos} scenario combinations across the household is too many to chart clearly "
-            f"(limit is {MAX_HOUSEHOLD_COMBOS}). Remove some scenarios to see the combined view."
-        )
-        return
+        return {}, total_combos
 
     end_year = date.today().year
     for choices in per_person_choices:
@@ -209,6 +207,18 @@ def render_household_combinations(people: list[dict]) -> None:
             series = project_series_by_year(person, overrides, end_year)
             total = series if total is None else total.add(series, fill_value=0)
         combo_data[label] = total
+
+    return combo_data, total_combos
+
+
+def render_household_combinations(combo_data: dict[str, pd.Series], total_combos: int) -> None:
+    """Draw the line + bar charts for every household scenario combination."""
+    if not combo_data:
+        st.caption(
+            f"{total_combos} scenario combinations across the household is too many to chart clearly "
+            f"(limit is {MAX_HOUSEHOLD_COMBOS}). Remove some scenarios to see the combined view."
+        )
+        return
 
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
 
@@ -528,12 +538,23 @@ else:
     st.subheader("Household Summary")
     total_current = sum(p["current_balance"] for p in st.session_state.people)
     total_projected = sum(project_balance(p).iloc[-1]["Balance"] for p in st.session_state.people)
-    s1, s2 = st.columns(2)
+    combo_data, total_combos = build_household_combo_data(st.session_state.people)
+    max_balance = max((series.iloc[-1] for series in combo_data.values()), default=None)
+
+    s1, s2, s3 = st.columns(3)
     s1.metric("Combined Current Balance", format_compact_currency(total_current), help=f"${total_current:,.0f}")
     s2.metric(
         "Combined Projected Balance at Retirement",
         format_compact_currency(total_projected),
         help=f"${total_projected:,.0f}",
     )
+    if max_balance is not None:
+        s3.metric(
+            "Maximum Scenario",
+            format_compact_currency(max_balance),
+            help=f"Best combination across the household: ${max_balance:,.0f}",
+        )
+    else:
+        s3.metric("Maximum Scenario", "—", help="Too many scenario combinations to compute")
 
-    render_household_combinations(st.session_state.people)
+    render_household_combinations(combo_data, total_combos)
