@@ -1,4 +1,5 @@
 import html
+import itertools
 import json
 import uuid
 from datetime import date
@@ -128,6 +129,70 @@ def render_totals_row(person: dict, base_df: pd.DataFrame) -> None:
             """,
             unsafe_allow_html=True,
         )
+
+
+MAX_HOUSEHOLD_COMBOS = 100
+
+
+def person_scenario_options(person: dict) -> list[tuple[str, dict]]:
+    """Each person's own set of choices: their Base plus every scenario."""
+    options = [("Base", {})]
+    for scenario in person["scenarios"]:
+        options.append((scenario["name"], {scenario["field"]: scenario["value"]}))
+    return options
+
+
+def project_series_by_year(person: dict, overrides: dict, end_year: int) -> pd.Series:
+    """Project a person's balance by calendar year, extended past their own
+    retirement year (growth-only compounding, no further contributions) so it
+    can be combined with other people's series through a shared end_year."""
+    df = project_balance(person, overrides)
+    series = dict(zip(df["Year"], df["Balance"]))
+    growth_rate = overrides.get("growth_rate_pct", person["growth_rate_pct"]) / 100
+
+    year = max(series)
+    balance = series[year]
+    while year < end_year:
+        year += 1
+        balance = balance * (1 + growth_rate)
+        series[year] = balance
+    return pd.Series(series).sort_index()
+
+
+def render_household_combinations(people: list[dict]) -> None:
+    """Draw every combination of each person's Base/scenarios summed together,
+    e.g. 3 options for one person x 3 for another = 9 combined household lines."""
+    per_person_choices = [
+        [(person, name, overrides) for name, overrides in person_scenario_options(person)]
+        for person in people
+    ]
+    total_combos = 1
+    for choices in per_person_choices:
+        total_combos *= len(choices)
+
+    if total_combos > MAX_HOUSEHOLD_COMBOS:
+        st.caption(
+            f"{total_combos} scenario combinations across the household is too many to chart clearly "
+            f"(limit is {MAX_HOUSEHOLD_COMBOS}). Remove some scenarios to see the combined view."
+        )
+        return
+
+    end_year = date.today().year
+    for choices in per_person_choices:
+        for person, _, overrides in choices:
+            end_year = max(end_year, project_balance(person, overrides).iloc[-1]["Year"])
+
+    combo_data = {}
+    for combo in itertools.product(*per_person_choices):
+        label = ", ".join(f"{person['name']}: {name}" for person, name, _ in combo)
+        total = None
+        for person, _, overrides in combo:
+            series = project_series_by_year(person, overrides, end_year)
+            total = series if total is None else total.add(series, fill_value=0)
+        combo_data[label] = total
+
+    st.markdown(f"**All Scenario Combinations** ({total_combos})")
+    st.line_chart(pd.concat(combo_data, axis=1))
 
 
 # ---------- UI ----------
@@ -323,3 +388,5 @@ else:
         format_compact_currency(total_projected),
         help=f"${total_projected:,.0f}",
     )
+
+    render_household_combinations(st.session_state.people)
