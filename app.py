@@ -1,6 +1,7 @@
 import html
 import itertools
 import json
+import re
 import uuid
 from datetime import date
 from pathlib import Path
@@ -271,6 +272,13 @@ def render_combo_legend(combo_labels: list[str], colors: list[str]) -> None:
     )
 
 
+def readable_text_color(color: str) -> str:
+    """White text on dark bar shades, near-black text on light bar shades."""
+    match = re.search(r"hsl\([^,]+,[^,]+,\s*([\d.]+)%\)", color)
+    lightness = float(match.group(1)) if match else 50.0
+    return "#ffffff" if lightness < 50 else "#1a1a1a"
+
+
 def render_household_combo_bars(
     combo_data: dict[str, pd.Series],
     combo_labels: list[str],
@@ -278,29 +286,29 @@ def render_household_combo_bars(
 ) -> None:
     """Bar chart of each combination's final projected balance, colored to
     match the line chart next to it (same scale, no legend of its own),
-    ordered highest to lowest, with each bar labeled in millions of dollars."""
+    ordered highest to lowest, with each bar labeled (in millions of
+    dollars) inside the top of the bar."""
     order_desc = sorted(combo_labels, key=lambda label: combo_data[label].iloc[-1], reverse=True)
+    color_map = dict(zip(color_scale.domain, color_scale.range))
+
     bar_df = pd.DataFrame({
         "Combination": order_desc,
         "Balance": [combo_data[label].iloc[-1] for label in order_desc],
     })
     bar_df["Label"] = bar_df["Balance"].apply(format_compact_currency)
-    # Headroom above the tallest bar so its value label isn't clipped.
-    y_max = bar_df["Balance"].max() * 1.15
+    bar_df["TextColor"] = [readable_text_color(color_map[label]) for label in order_desc]
 
     bars = alt.Chart(bar_df).mark_bar().encode(
         x=alt.X("Combination:N", sort=order_desc, axis=None, title=None),
-        y=alt.Y(
-            "Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s"),
-            scale=alt.Scale(domain=[0, y_max]),
-        ),
+        y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
         color=alt.Color("Combination:N", scale=color_scale, sort=order_desc, legend=None),
         tooltip=[alt.Tooltip("Combination:N"), alt.Tooltip("Balance:Q", format="$,.0f")],
     )
-    labels = alt.Chart(bar_df).mark_text(dy=-10, fontSize=13, fontWeight="bold").encode(
+    labels = alt.Chart(bar_df).mark_text(dy=16, baseline="top", fontSize=13, fontWeight="bold").encode(
         x=alt.X("Combination:N", sort=order_desc),
         y="Balance:Q",
         text="Label:N",
+        color=alt.Color("TextColor:N", scale=None, legend=None),
     )
 
     st.altair_chart((bars + labels).properties(height=420), width="stretch")
