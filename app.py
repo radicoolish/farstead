@@ -160,6 +160,13 @@ def project_series_by_year(person: dict, overrides: dict, end_year: int) -> pd.S
     return pd.Series(series).sort_index()
 
 
+def green_palette(n: int) -> list[str]:
+    """n evenly-spaced shades of green, light to dark."""
+    if n <= 1:
+        return ["#2e7d32"]
+    return [f"hsl(145, 55%, {75 - (i / (n - 1)) * 50:.0f}%)" for i in range(n)]
+
+
 def render_household_combinations(people: list[dict]) -> None:
     """Draw every combination of each person's Base/scenarios summed together,
     e.g. 3 options for one person x 3 for another = 9 combined household lines."""
@@ -195,11 +202,11 @@ def render_household_combinations(people: list[dict]) -> None:
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
 
     combo_labels = list(combo_data.keys())
-    # Shared scale so colors match between the line chart and the bar chart
-    # next to it. Only the line chart keeps a legend (single row, no
-    # `columns` limit) so there's one legend for both instead of two.
-    color_scale = alt.Scale(domain=combo_labels)
-    legend = alt.Legend(title=None, orient="bottom", labelLimit=500, labelFontSize=13)
+    # Shared green-shades scale so colors match between the line chart and
+    # the bar chart next to it. Neither chart renders its own legend — a
+    # single custom legend is drawn below both instead.
+    green_colors = green_palette(len(combo_labels))
+    color_scale = alt.Scale(domain=combo_labels, range=green_colors)
 
     long_df = (
         pd.concat(combo_data, axis=1)
@@ -213,7 +220,7 @@ def render_household_combinations(people: list[dict]) -> None:
         .encode(
             x=alt.X("Year:O", title="Year"),
             y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
-            color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=legend),
+            color=alt.Color("Combination:N", scale=color_scale, sort=combo_labels, legend=None),
             tooltip=[
                 alt.Tooltip("Combination:N"),
                 alt.Tooltip("Year:O"),
@@ -228,6 +235,26 @@ def render_household_combinations(people: list[dict]) -> None:
         st.altair_chart(line_chart, width="stretch")
     with bar_col:
         render_household_combo_bars(combo_data, combo_labels, color_scale)
+
+    render_combo_legend(combo_labels, green_colors)
+
+
+def render_combo_legend(combo_labels: list[str], colors: list[str]) -> None:
+    """Single legend, centered below both charts, shared by the line and bar
+    charts (which render with no legend of their own)."""
+    swatches = "".join(
+        f'<div style="display:flex; align-items:center; gap:6px; margin:4px 12px 4px 0;">'
+        f'<span style="width:12px; height:12px; border-radius:2px; background:{color}; '
+        f'display:inline-block; flex-shrink:0;"></span>'
+        f'<span style="font-size:0.8rem;">{html.escape(label)}</span>'
+        f"</div>"
+        for label, color in zip(combo_labels, colors)
+    )
+    st.markdown(
+        f'<div style="display:flex; flex-wrap:wrap; justify-content:center; '
+        f'margin-top:6px;">{swatches}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_household_combo_bars(
