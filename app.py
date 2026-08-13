@@ -42,6 +42,16 @@ if "people" not in st.session_state:
         normalize_scenarios(p)
 
 
+# ---------- Color palette ----------
+# One deliberate, cohesive palette for every chart in the app. The per-person
+# chart uses it as fixed categorical colors (Base is always the neutral
+# slate; scenarios take the accent colors in order). The household
+# combinations charts use the same hue family but as a light-to-dark
+# sequential green scale, since color there encodes projected value rather
+# than category identity.
+PERSON_CHART_PALETTE = ["#334155", "#2563eb", "#d97706", "#7c3aed", "#0891b2"]
+
+
 # ---------- Scenario field config ----------
 # Fields a scenario is allowed to vary. Current balance, birthday, employer
 # match, current salary, and account type stay fixed from the base person.
@@ -163,8 +173,8 @@ def project_series_by_year(person: dict, overrides: dict, end_year: int) -> pd.S
 def green_palette(n: int) -> list[str]:
     """n evenly-spaced shades of green, light to dark."""
     if n <= 1:
-        return ["#2e7d32"]
-    return [f"hsl(145, 55%, {75 - (i / (n - 1)) * 50:.0f}%)" for i in range(n)]
+        return ["#15803d"]
+    return [f"hsl(152, 45%, {78 - (i / (n - 1)) * 56:.0f}%)" for i in range(n)]
 
 
 def render_household_combinations(people: list[dict]) -> None:
@@ -388,8 +398,36 @@ else:
                     s_df = project_balance(person, {scenario["field"]: scenario["value"]})
                     if len(s_df) > 1:
                         chart_data[scenario["name"]] = s_df.set_index("Age")["Balance"]
-                combined = pd.concat(chart_data, axis=1)
-                st.line_chart(combined)
+
+                series_labels = list(chart_data.keys())
+                series_colors = PERSON_CHART_PALETTE[:len(series_labels)]
+                person_long_df = (
+                    pd.concat(chart_data, axis=1)
+                    .rename_axis("Age")
+                    .reset_index()
+                    .melt(id_vars="Age", var_name="Series", value_name="Balance")
+                )
+                person_chart = (
+                    alt.Chart(person_long_df)
+                    .mark_line()
+                    .encode(
+                        x=alt.X("Age:Q", title="Age"),
+                        y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
+                        color=alt.Color(
+                            "Series:N",
+                            scale=alt.Scale(domain=series_labels, range=series_colors),
+                            sort=series_labels,
+                            legend=alt.Legend(title=None, orient="bottom", labelLimit=300, labelFontSize=12),
+                        ),
+                        tooltip=[
+                            alt.Tooltip("Series:N"),
+                            alt.Tooltip("Age:Q"),
+                            alt.Tooltip("Balance:Q", format="$,.0f"),
+                        ],
+                    )
+                    .properties(height=340)
+                )
+                st.altair_chart(person_chart, width="stretch")
 
                 st.caption("Projected balance at retirement")
                 render_totals_row(person, df)
