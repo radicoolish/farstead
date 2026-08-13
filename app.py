@@ -190,9 +190,9 @@ else:
         normalize_scenarios(person)
         age = calculate_age(date.fromisoformat(person["birthday"]))
         with st.expander(f"{person['name']} — Age {age} — {person['account_type']}", expanded=False):
-            info_col, action_col = st.columns([4, 1])
+            header_col, action_col = st.columns([5, 1])
 
-            with info_col:
+            with header_col:
                 m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("Current Balance", f"${person['current_balance']:,.0f}")
                 m2.metric("Current Salary", f"${person['current_salary']:,.0f}")
@@ -203,24 +203,6 @@ else:
 
                 st.caption(f"Account type: {person['account_type']}")
 
-                df = project_balance(person)
-                if len(df) > 1:
-                    chart_data = {"Base": df.set_index("Age")["Balance"]}
-                    for scenario in person["scenarios"]:
-                        s_df = project_balance(person, {scenario["field"]: scenario["value"]})
-                        if len(s_df) > 1:
-                            chart_data[scenario["name"]] = s_df.set_index("Age")["Balance"]
-                    combined = pd.concat(chart_data, axis=1)
-                    st.line_chart(combined)
-
-                    st.caption("Projected balance at retirement")
-                    render_totals_row(person, df)
-
-                    with st.popover("View year-by-year projection"):
-                        st.dataframe(df, width="stretch", hide_index=True)
-                else:
-                    st.warning("Retirement age must be greater than current age to project growth.")
-
             with action_col:
                 if st.button("Delete", key=f"delete_{person['id']}"):
                     st.session_state.people = [
@@ -228,6 +210,26 @@ else:
                     ]
                     save_people(st.session_state.people)
                     st.rerun()
+
+            # Chart and totals span the full expander width so they're centered,
+            # rather than being squeezed into the narrower header_col above.
+            df = project_balance(person)
+            if len(df) > 1:
+                chart_data = {"Base": df.set_index("Age")["Balance"]}
+                for scenario in person["scenarios"]:
+                    s_df = project_balance(person, {scenario["field"]: scenario["value"]})
+                    if len(s_df) > 1:
+                        chart_data[scenario["name"]] = s_df.set_index("Age")["Balance"]
+                combined = pd.concat(chart_data, axis=1)
+                st.line_chart(combined)
+
+                st.caption("Projected balance at retirement")
+                render_totals_row(person, df)
+
+                with st.popover("View year-by-year projection"):
+                    st.dataframe(df, width="stretch", hide_index=True)
+            else:
+                st.warning("Retirement age must be greater than current age to project growth.")
 
             st.markdown("**Scenarios** — vary one assumption at a time and compare it to the base projection above.")
 
