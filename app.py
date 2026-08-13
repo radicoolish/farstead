@@ -193,17 +193,15 @@ else:
             info_col, action_col = st.columns([4, 1])
 
             with info_col:
-                m1, m2, m3, m4 = st.columns(4)
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("Current Balance", f"${person['current_balance']:,.0f}")
                 m2.metric("Current Salary", f"${person['current_salary']:,.0f}")
                 m3.metric("Contribution + Match", f"{person['contribution_pct'] + person['match_pct']:.1f}%")
                 m4.metric("Retirement Age", person["retirement_age"])
+                m5.metric("Salary Increase", f"{person['salary_increase_pct']}%")
+                m6.metric("Growth Rate", f"{person['growth_rate_pct']}%")
 
-                st.caption(
-                    f"Growth rate assumption: {person['growth_rate_pct']}% • "
-                    f"Salary increase assumption: {person['salary_increase_pct']}% • "
-                    f"Account type: {person['account_type']}"
-                )
+                st.caption(f"Account type: {person['account_type']}")
 
                 df = project_balance(person)
                 if len(df) > 1:
