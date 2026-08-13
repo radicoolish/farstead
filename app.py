@@ -5,6 +5,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -192,7 +193,67 @@ def render_household_combinations(people: list[dict]) -> None:
         combo_data[label] = total
 
     st.markdown(f"**All Scenario Combinations** ({total_combos})")
-    st.line_chart(pd.concat(combo_data, axis=1))
+
+    long_df = (
+        pd.concat(combo_data, axis=1)
+        .rename_axis("Year")
+        .reset_index()
+        .melt(id_vars="Year", var_name="Combination", value_name="Balance")
+    )
+    chart = (
+        alt.Chart(long_df)
+        .mark_line()
+        .encode(
+            x=alt.X("Year:O", title="Year"),
+            y=alt.Y("Balance:Q", title="Balance ($)", axis=alt.Axis(format="$,.2s")),
+            color=alt.Color(
+                "Combination:N",
+                legend=alt.Legend(
+                    title=None,
+                    orient="bottom",
+                    columns=2,
+                    labelLimit=500,
+                    labelFontSize=13,
+                    symbolLimit=MAX_HOUSEHOLD_COMBOS,
+                    rowPadding=6,
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip("Combination:N"),
+                alt.Tooltip("Year:O"),
+                alt.Tooltip("Balance:Q", format="$,.0f"),
+            ],
+        )
+        .properties(height=420)
+    )
+    st.altair_chart(chart, width="stretch")
+
+    render_household_combo_totals(combo_data)
+
+
+def render_household_combo_totals(combo_data: dict[str, pd.Series]) -> None:
+    """Readable, wrapped grid of each combination's final projected balance."""
+    st.markdown("**Projected balance at end of horizon, by combination**")
+    labels = list(combo_data.keys())
+    cols_per_row = 3
+    for start in range(0, len(labels), cols_per_row):
+        row_labels = labels[start:start + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for col, label in zip(cols, row_labels):
+            balance = combo_data[label].iloc[-1]
+            safe_label = html.escape(label)
+            col.markdown(
+                f"""
+                <div style="text-align:center; padding:10px 8px; margin-bottom:10px;
+                            border:1px solid rgba(128,128,128,0.3); border-radius:8px;">
+                    <div style="font-size:0.85rem; font-weight:600; line-height:1.35;
+                                margin-bottom:6px;">{safe_label}</div>
+                    <div style="font-size:1.2rem; font-weight:700;"
+                         title="${balance:,.0f}">{format_compact_currency(balance)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 # ---------- UI ----------
