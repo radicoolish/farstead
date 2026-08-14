@@ -528,7 +528,14 @@ def describe_expense(expense: dict) -> str:
 st.title("Household Income")
 st.caption("Section 1: Per-person income, paycheck deductions, and effective tax rate")
 
-with st.expander("Add a Person", expanded=not st.session_state.people):
+if "income_form_open" not in st.session_state:
+    # Seeded once rather than recomputed every run — this section isn't in
+    # an st.form (the tax-rate estimator needs to react immediately), so
+    # every field edit reruns the script; recomputing `not people` each
+    # time would collapse the expander out from under whoever's mid-edit.
+    st.session_state.income_form_open = not st.session_state.people
+
+with st.expander("Add a Person", expanded=st.session_state.income_form_open):
     name_col, birthday_col = st.columns(2)
     with name_col:
         income_name = st.text_input("Name", key="income_name")
@@ -555,10 +562,10 @@ with st.expander("Add a Person", expanded=not st.session_state.people):
 
     with col2:
         tax_rate_key = "income_tax_rate_input"
-        income_tax_rate_pct = st.number_input(
-            "Effective Tax Rate (%)", min_value=0.0, max_value=60.0,
-            value=st.session_state.get(tax_rate_key, 22.0), step=0.5, key=tax_rate_key,
-        )
+        # The estimator must run — and, if clicked, write to
+        # session_state[tax_rate_key] — BEFORE the number_input below is
+        # instantiated with that same key, or Streamlit raises trying to
+        # modify a widget's value after it's already been created this run.
         with st.popover("Estimate my rate"):
             st.caption("Approximate federal + state effective rate, for planning only — not tax advice.")
             est_state = st.selectbox(
@@ -573,7 +580,11 @@ with st.expander("Add a Person", expanded=not st.session_state.people):
                     est_state, est_filing_status, income_salary, pretax_reductions
                 )
                 st.session_state[tax_rate_key] = round(estimated, 1)
-                st.rerun()
+
+        income_tax_rate_pct = st.number_input(
+            "Effective Tax Rate (%)", min_value=0.0, max_value=60.0,
+            value=st.session_state.get(tax_rate_key, 22.0), step=0.5, key=tax_rate_key,
+        )
 
         if income_salary > 0:
             gross_monthly = income_salary / 12
@@ -701,7 +712,13 @@ current_age_for_expenses = st.number_input(
     key="expenses_current_age",
 )
 
-with st.expander("Add an Expense", expanded=not st.session_state.expenses):
+if "expense_form_open" not in st.session_state:
+    # Same reasoning as income_form_open above — this section isn't in a
+    # form either, so recomputing `not expenses` every run would collapse
+    # it after every field edit.
+    st.session_state.expense_form_open = not st.session_state.expenses
+
+with st.expander("Add an Expense", expanded=st.session_state.expense_form_open):
     type_col, amount_col = st.columns(2)
     with type_col:
         expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
