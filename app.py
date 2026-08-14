@@ -548,23 +548,59 @@ def project_household_total_expenses_by_age(expenses: list[dict], current_age: i
     return totals
 
 
+def project_household_withdrawal_income_by_age(
+    people: list[dict], current_age: int, horizon_age: int, withdrawal_rate_pct: float
+) -> dict[int, float]:
+    """401k withdrawal income by household reference age, summed across
+    everyone, starting the year after their own earned income stops (past
+    their own retirement age). Each year's withdrawal is withdrawal_rate% of
+    that person's 401k balance at the start of the year (using their own
+    base projection through retirement as the starting balance); the
+    remainder then compounds at their own growth rate for next year."""
+    totals = {age: 0.0 for age in range(current_age, horizon_age + 1)}
+    withdrawal_rate = withdrawal_rate_pct / 100
+    for person in people:
+        person_age = calculate_age(date.fromisoformat(person["birthday"]))
+        base_df = project_balance(person)
+        balance_by_person_age = dict(zip(base_df["Age"], base_df["Balance"]))
+        balance = balance_by_person_age.get(person["retirement_age"], base_df.iloc[-1]["Balance"])
+        growth_rate = person["growth_rate_pct"] / 100
+
+        for i, age in enumerate(range(current_age, horizon_age + 1)):
+            if person_age + i <= person["retirement_age"]:
+                continue
+            withdrawal = balance * withdrawal_rate
+            totals[age] += withdrawal
+            balance = (balance - withdrawal) * (1 + growth_rate)
+    return totals
+
+
 def render_income_vs_expenses_chart(
-    people: list[dict], expenses: list[dict], current_age: int, horizon_age: int
+    people: list[dict], expenses: list[dict], current_age: int, horizon_age: int, withdrawal_rate_pct: float
 ) -> None:
-    """Household net income and total expenses as lines, and the resulting
-    surplus/deficit (income minus expenses) as bars, all on one chart."""
+    """Earned income, 401k withdrawal income, and total expenses as lines,
+    and the resulting surplus/deficit ((income + withdrawal) - expenses) as
+    bars, all on one chart. Once a person's earned income stops, their
+    withdrawal income (401k balance x withdrawal rate) takes over."""
     income_by_age = project_household_net_income_by_age(people, current_age, horizon_age)
+    withdrawal_by_age = project_household_withdrawal_income_by_age(
+        people, current_age, horizon_age, withdrawal_rate_pct
+    )
     expenses_by_age = project_household_total_expenses_by_age(expenses, current_age, horizon_age)
 
     ages = list(range(current_age, horizon_age + 1))
     cash_df = pd.DataFrame({
         "Age": ages,
         "Income": [income_by_age[a] for a in ages],
+        "401k Withdrawal": [withdrawal_by_age[a] for a in ages],
         "Expenses": [expenses_by_age[a] for a in ages],
     })
-    cash_df["Net"] = cash_df["Income"] - cash_df["Expenses"]
+    cash_df["Net"] = cash_df["Income"] + cash_df["401k Withdrawal"] - cash_df["Expenses"]
     cash_df["NetSign"] = cash_df["Net"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
-    lines_df = cash_df.melt(id_vars="Age", value_vars=["Income", "Expenses"], var_name="Series", value_name="Amount")
+    lines_df = cash_df.melt(
+        id_vars="Age", value_vars=["Income", "401k Withdrawal", "Expenses"],
+        var_name="Series", value_name="Amount",
+    )
 
     bar_chart = alt.Chart(cash_df).mark_bar(opacity=0.55).encode(
         x=alt.X("Age:O", title="Age"),
@@ -581,7 +617,10 @@ def render_income_vs_expenses_chart(
         y=alt.Y("Amount:Q"),
         color=alt.Color(
             "Series:N",
-            scale=alt.Scale(domain=["Income", "Expenses"], range=["#2563eb", "#d97706"]),
+            scale=alt.Scale(
+                domain=["Income", "401k Withdrawal", "Expenses"],
+                range=["#2563eb", "#7c3aed", "#d97706"],
+            ),
             legend=alt.Legend(title=None, orient="bottom", labelFontSize=12),
         ),
         tooltip=[alt.Tooltip("Series:N"), alt.Tooltip("Age:O"), alt.Tooltip("Amount:Q", format="$,.0f")],
@@ -765,159 +804,12 @@ else:
 
 
 # ==========================================================================
-# Section 2: Household Expenses
-# ==========================================================================
-
-st.divider()
-st.title("Household Expenses")
-st.caption(f"Section 2: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}")
-
-default_current_age = (
-    calculate_age(date.fromisoformat(st.session_state.people[0]["birthday"]))
-    if st.session_state.people else 35
-)
-current_age_for_expenses = st.number_input(
-    "Current Age (for this projection)",
-    min_value=1,
-    max_value=EXPENSE_HORIZON_AGE - 1,
-    value=min(default_current_age, EXPENSE_HORIZON_AGE - 1),
-    key="expenses_current_age",
-)
-
-if "expense_form_open" not in st.session_state:
-    # Same reasoning as income_form_open above — this section isn't in a
-    # form either, so recomputing `not expenses` every run would collapse
-    # it after every field edit.
-    st.session_state.expense_form_open = not st.session_state.expenses
-
-with st.expander("Add an Expense", expanded=st.session_state.expense_form_open):
-    type_col, amount_col = st.columns(2)
-    with type_col:
-        expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
-    is_loan_type = expense_type in LOAN_EXPENSE_TYPES
-    with amount_col:
-        monthly_amount = st.number_input(
-            "Current Monthly Payment ($)" if is_loan_type else "Monthly Value ($)",
-            min_value=0.0, value=0.0, step=50.0, key="expense_monthly_amount",
-        )
-
-    is_perpetuity = True
-    start_age_input = None
-    stop_age_input = None
-    apply_inflation = False
-    inflation_rate = 0.0
-    remaining_term_years = None
-
-    if is_loan_type:
-        remaining_term_years = st.number_input(
-            "Remaining Term (Years)", min_value=0, max_value=50, value=15, step=1,
-            key="expense_remaining_term",
-        )
-        st.caption("Loan payments are fixed (no inflation) and fall off automatically once the term ends.")
-    else:
-        is_perpetuity = st.checkbox(
-            "Perpetuity (runs the whole projection)", value=True, key="expense_perpetuity"
-        )
-        if not is_perpetuity:
-            start_col, stop_col = st.columns(2)
-            with start_col:
-                start_age_input = st.number_input(
-                    "Start Age", min_value=1, max_value=100, value=int(current_age_for_expenses),
-                    key="expense_start_age",
-                )
-            with stop_col:
-                stop_age_input = st.number_input(
-                    "Stop Age", min_value=1, max_value=100,
-                    value=min(int(current_age_for_expenses) + 10, 100), key="expense_stop_age",
-                )
-        apply_inflation = st.checkbox("Apply Inflation", value=True, key="expense_apply_inflation")
-        if apply_inflation:
-            inflation_rate = st.number_input(
-                "Inflation Rate (%)", min_value=0.0, max_value=20.0, value=3.0, step=0.1,
-                key="expense_inflation_rate",
-            )
-
-    if st.button("Add Expense", key="add_expense_button"):
-        st.session_state.expenses.append({
-            "id": str(uuid.uuid4()),
-            "type": expense_type,
-            "monthly_amount": monthly_amount,
-            "is_loan": is_loan_type,
-            "remaining_term_years": remaining_term_years,
-            "is_perpetuity": is_perpetuity,
-            "start_age": start_age_input,
-            "stop_age": stop_age_input,
-            "apply_inflation": apply_inflation,
-            "inflation_rate": inflation_rate,
-        })
-        save_expenses(st.session_state.expenses)
-        st.rerun()
-
-st.divider()
-
-if not st.session_state.expenses:
-    st.info("No expenses added yet. Use the form above to add one.")
-else:
-    st.subheader("Expenses")
-    for expense in st.session_state.expenses:
-        e_col, remove_col = st.columns([5, 1])
-        e_col.markdown(f"**{expense['type']}** — {describe_expense(expense)}")
-        if remove_col.button("Remove", key=f"remove_expense_{expense['id']}"):
-            st.session_state.expenses = [
-                e for e in st.session_state.expenses if e["id"] != expense["id"]
-            ]
-            save_expenses(st.session_state.expenses)
-            st.rerun()
-
-    st.divider()
-    st.subheader("Projected Household Expenses")
-    expense_chart_df = build_expense_chart_df(
-        st.session_state.expenses, int(current_age_for_expenses), EXPENSE_HORIZON_AGE
-    )
-    if expense_chart_df.empty:
-        st.info("No active expenses in the selected age range.")
-    else:
-        expense_chart = (
-            alt.Chart(expense_chart_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("Age:O", title="Age"),
-                y=alt.Y("Cost:Q", title="Annual Cost ($)", stack="zero", axis=alt.Axis(format="$,.2s")),
-                color=alt.Color(
-                    "Type:N",
-                    scale=alt.Scale(domain=EXPENSE_TYPES, range=[EXPENSE_PALETTE[t] for t in EXPENSE_TYPES]),
-                    sort=EXPENSE_TYPES,
-                    legend=alt.Legend(title=None, orient="bottom", labelLimit=200, labelFontSize=12, columns=4),
-                ),
-                tooltip=[
-                    alt.Tooltip("Age:O"),
-                    alt.Tooltip("Type:N"),
-                    alt.Tooltip("Cost:Q", format="$,.0f"),
-                ],
-            )
-            .properties(height=440)
-        )
-        st.altair_chart(expense_chart, width="stretch")
-
-    st.divider()
-    st.subheader("Household Income vs. Expenses")
-    st.caption(
-        "Combined take-home income and total expenses by age, with the surplus or deficit "
-        "(income minus expenses) shown as bars."
-    )
-    render_income_vs_expenses_chart(
-        st.session_state.people, st.session_state.expenses,
-        int(current_age_for_expenses), EXPENSE_HORIZON_AGE,
-    )
-
-
-# ==========================================================================
-# Section 3: 401(k) Planner
+# Section 2: 401(k) Planner
 # ==========================================================================
 
 st.divider()
 st.title("401(k) Planner")
-st.caption("Section 3: Individual 401(k) inputs and balance projection")
+st.caption("Section 2: Individual 401(k) inputs and balance projection")
 
 if not st.session_state.people:
     st.info("No people yet — add someone in the Income section above.")
@@ -1225,3 +1117,156 @@ else:
         s3.metric("Maximum Scenario", "—", help="Too many scenario combinations to compute")
 
     render_household_combinations(combo_data, total_combos)
+# ==========================================================================
+# Section 3: Household Expenses
+# ==========================================================================
+
+st.divider()
+st.title("Household Expenses")
+st.caption(f"Section 3: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}")
+
+default_current_age = (
+    calculate_age(date.fromisoformat(st.session_state.people[0]["birthday"]))
+    if st.session_state.people else 35
+)
+current_age_for_expenses = st.number_input(
+    "Current Age (for this projection)",
+    min_value=1,
+    max_value=EXPENSE_HORIZON_AGE - 1,
+    value=min(default_current_age, EXPENSE_HORIZON_AGE - 1),
+    key="expenses_current_age",
+)
+
+if "expense_form_open" not in st.session_state:
+    # Same reasoning as income_form_open above — this section isn't in a
+    # form either, so recomputing `not expenses` every run would collapse
+    # it after every field edit.
+    st.session_state.expense_form_open = not st.session_state.expenses
+
+with st.expander("Add an Expense", expanded=st.session_state.expense_form_open):
+    type_col, amount_col = st.columns(2)
+    with type_col:
+        expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
+    is_loan_type = expense_type in LOAN_EXPENSE_TYPES
+    with amount_col:
+        monthly_amount = st.number_input(
+            "Current Monthly Payment ($)" if is_loan_type else "Monthly Value ($)",
+            min_value=0.0, value=0.0, step=50.0, key="expense_monthly_amount",
+        )
+
+    is_perpetuity = True
+    start_age_input = None
+    stop_age_input = None
+    apply_inflation = False
+    inflation_rate = 0.0
+    remaining_term_years = None
+
+    if is_loan_type:
+        remaining_term_years = st.number_input(
+            "Remaining Term (Years)", min_value=0, max_value=50, value=15, step=1,
+            key="expense_remaining_term",
+        )
+        st.caption("Loan payments are fixed (no inflation) and fall off automatically once the term ends.")
+    else:
+        is_perpetuity = st.checkbox(
+            "Perpetuity (runs the whole projection)", value=True, key="expense_perpetuity"
+        )
+        if not is_perpetuity:
+            start_col, stop_col = st.columns(2)
+            with start_col:
+                start_age_input = st.number_input(
+                    "Start Age", min_value=1, max_value=100, value=int(current_age_for_expenses),
+                    key="expense_start_age",
+                )
+            with stop_col:
+                stop_age_input = st.number_input(
+                    "Stop Age", min_value=1, max_value=100,
+                    value=min(int(current_age_for_expenses) + 10, 100), key="expense_stop_age",
+                )
+        apply_inflation = st.checkbox("Apply Inflation", value=True, key="expense_apply_inflation")
+        if apply_inflation:
+            inflation_rate = st.number_input(
+                "Inflation Rate (%)", min_value=0.0, max_value=20.0, value=3.0, step=0.1,
+                key="expense_inflation_rate",
+            )
+
+    if st.button("Add Expense", key="add_expense_button"):
+        st.session_state.expenses.append({
+            "id": str(uuid.uuid4()),
+            "type": expense_type,
+            "monthly_amount": monthly_amount,
+            "is_loan": is_loan_type,
+            "remaining_term_years": remaining_term_years,
+            "is_perpetuity": is_perpetuity,
+            "start_age": start_age_input,
+            "stop_age": stop_age_input,
+            "apply_inflation": apply_inflation,
+            "inflation_rate": inflation_rate,
+        })
+        save_expenses(st.session_state.expenses)
+        st.rerun()
+
+st.divider()
+
+if not st.session_state.expenses:
+    st.info("No expenses added yet. Use the form above to add one.")
+else:
+    st.subheader("Expenses")
+    for expense in st.session_state.expenses:
+        e_col, remove_col = st.columns([5, 1])
+        e_col.markdown(f"**{expense['type']}** — {describe_expense(expense)}")
+        if remove_col.button("Remove", key=f"remove_expense_{expense['id']}"):
+            st.session_state.expenses = [
+                e for e in st.session_state.expenses if e["id"] != expense["id"]
+            ]
+            save_expenses(st.session_state.expenses)
+            st.rerun()
+
+    st.divider()
+    st.subheader("Projected Household Expenses")
+    expense_chart_df = build_expense_chart_df(
+        st.session_state.expenses, int(current_age_for_expenses), EXPENSE_HORIZON_AGE
+    )
+    if expense_chart_df.empty:
+        st.info("No active expenses in the selected age range.")
+    else:
+        expense_chart = (
+            alt.Chart(expense_chart_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("Age:O", title="Age"),
+                y=alt.Y("Cost:Q", title="Annual Cost ($)", stack="zero", axis=alt.Axis(format="$,.2s")),
+                color=alt.Color(
+                    "Type:N",
+                    scale=alt.Scale(domain=EXPENSE_TYPES, range=[EXPENSE_PALETTE[t] for t in EXPENSE_TYPES]),
+                    sort=EXPENSE_TYPES,
+                    legend=alt.Legend(title=None, orient="bottom", labelLimit=200, labelFontSize=12, columns=4),
+                ),
+                tooltip=[
+                    alt.Tooltip("Age:O"),
+                    alt.Tooltip("Type:N"),
+                    alt.Tooltip("Cost:Q", format="$,.0f"),
+                ],
+            )
+            .properties(height=440)
+        )
+        st.altair_chart(expense_chart, width="stretch")
+
+    st.divider()
+    st.subheader("Household Income vs. Expenses")
+    st.caption(
+        "Combined take-home income, 401k withdrawal income, and total expenses by age, with the "
+        "surplus or deficit (income + withdrawal − expenses) shown as bars. Once a person's earned "
+        "income stops (their own retirement age), their 401k balance x withdrawal rate takes over."
+    )
+    withdrawal_rate_pct = st.number_input(
+        "401k Withdrawal Rate (%)", min_value=0.0, max_value=20.0, value=4.0, step=0.5,
+        key="withdrawal_rate_pct",
+        help="Annual % of 401k balance drawn as income once a person's own earned income stops.",
+    )
+    render_income_vs_expenses_chart(
+        st.session_state.people, st.session_state.expenses,
+        int(current_age_for_expenses), EXPENSE_HORIZON_AGE, withdrawal_rate_pct,
+    )
+
+
