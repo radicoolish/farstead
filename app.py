@@ -54,6 +54,10 @@ def normalize_person(person: dict) -> None:
     # Stop Contribution Age defaults to retirement age for people saved
     # before this field existed.
     person.setdefault("stop_contribution_age", person["retirement_age"])
+    # Income-section fields for people saved before that section existed.
+    person.setdefault("hsa_monthly", 0.0)
+    person.setdefault("medical_insurance_monthly", 0.0)
+    person.setdefault("tax_rate_pct", 22.0)
 
 
 if "people" not in st.session_state:
@@ -110,6 +114,75 @@ def categorical_palette(n: int) -> list[str]:
 
 
 EXPENSE_PALETTE = dict(zip(EXPENSE_TYPES, categorical_palette(len(EXPENSE_TYPES))))
+
+
+# ---------- Income tax estimate config ----------
+# Approximate, for planning purposes only — not tax advice. Federal brackets
+# and the standard deduction are 2024 figures; state rates are single-number
+# approximations (most states have their own bracket schedules, but modeling
+# all 50 in full is out of scope for a planning tool, not a tax preparer).
+FILING_STATUSES = ["Single", "Married Filing Jointly", "Married Filing Separately", "Head of Household"]
+
+FEDERAL_BRACKETS_2024 = {
+    "Single": [
+        (0, 0.10), (11600, 0.12), (47150, 0.22), (100525, 0.24),
+        (191950, 0.32), (243725, 0.35), (609350, 0.37),
+    ],
+    "Married Filing Jointly": [
+        (0, 0.10), (23200, 0.12), (94300, 0.22), (201050, 0.24),
+        (383900, 0.32), (487450, 0.35), (731200, 0.37),
+    ],
+    "Head of Household": [
+        (0, 0.10), (16550, 0.12), (63100, 0.22), (100500, 0.24),
+        (191950, 0.32), (243700, 0.35), (609350, 0.37),
+    ],
+}
+# Married Filing Separately brackets track Single closely enough at most
+# incomes to approximate with the same table.
+FEDERAL_BRACKETS_2024["Married Filing Separately"] = FEDERAL_BRACKETS_2024["Single"]
+
+STANDARD_DEDUCTION_2024 = {
+    "Single": 14600, "Married Filing Jointly": 29200,
+    "Married Filing Separately": 14600, "Head of Household": 21900,
+}
+
+# Approximate effective state income tax rate (%) for a typical earner.
+STATE_TAX_RATES = {
+    "Alabama": 5.0, "Alaska": 0.0, "Arizona": 2.5, "Arkansas": 4.4, "California": 9.3,
+    "Colorado": 4.4, "Connecticut": 6.5, "Delaware": 6.6, "Florida": 0.0, "Georgia": 5.39,
+    "Hawaii": 8.25, "Idaho": 5.8, "Illinois": 4.95, "Indiana": 3.05, "Iowa": 5.7,
+    "Kansas": 5.7, "Kentucky": 4.5, "Louisiana": 4.25, "Maine": 7.15, "Maryland": 5.75,
+    "Massachusetts": 5.0, "Michigan": 4.25, "Minnesota": 7.85, "Mississippi": 5.0, "Missouri": 4.95,
+    "Montana": 5.9, "Nebraska": 5.84, "Nevada": 0.0, "New Hampshire": 0.0, "New Jersey": 6.37,
+    "New Mexico": 4.9, "New York": 6.85, "North Carolina": 4.5, "North Dakota": 2.5, "Ohio": 3.5,
+    "Oklahoma": 4.75, "Oregon": 8.75, "Pennsylvania": 3.07, "Rhode Island": 5.99, "South Carolina": 6.4,
+    "South Dakota": 0.0, "Tennessee": 0.0, "Texas": 0.0, "Utah": 4.65, "Vermont": 6.6,
+    "Virginia": 5.75, "Washington": 0.0, "West Virginia": 5.12, "Wisconsin": 5.3, "Wyoming": 0.0,
+    "District of Columbia": 8.5,
+}
+
+
+def calculate_federal_tax(taxable_income: float, filing_status: str) -> float:
+    brackets = FEDERAL_BRACKETS_2024[filing_status]
+    tax = 0.0
+    for i, (threshold, rate) in enumerate(brackets):
+        if taxable_income <= threshold:
+            break
+        next_threshold = brackets[i + 1][0] if i + 1 < len(brackets) else float("inf")
+        tax += (min(taxable_income, next_threshold) - threshold) * rate
+    return tax
+
+
+def estimate_effective_tax_rate(
+    state: str, filing_status: str, annual_salary: float, pretax_reductions: float = 0.0
+) -> float:
+    """Approximate combined federal + state effective tax rate (%) on gross
+    salary, for planning only — not tax advice."""
+    if annual_salary <= 0:
+        return 0.0
+    taxable_income = max(annual_salary - STANDARD_DEDUCTION_2024[filing_status] - pretax_reductions, 0.0)
+    federal_rate = calculate_federal_tax(taxable_income, filing_status) / annual_salary * 100
+    return federal_rate + STATE_TAX_RATES.get(state, 0.0)
 
 
 # ---------- Helpers ----------
@@ -448,64 +521,306 @@ def describe_expense(expense: dict) -> str:
 
 # ---------- UI ----------
 
-st.title("401(k) Planner")
-st.caption("Section 1: Individual 401(k) inputs and balance projection")
+# ==========================================================================
+# Section 1: Income
+# ==========================================================================
+
+st.title("Household Income")
+st.caption("Section 1: Per-person income, paycheck deductions, and effective tax rate")
 
 with st.expander("Add a Person", expanded=not st.session_state.people):
-    with st.form("add_person_form", clear_on_submit=True):
-        col1, col2, col3 = st.columns(3)
+    name_col, birthday_col = st.columns(2)
+    with name_col:
+        income_name = st.text_input("Name", key="income_name")
+    with birthday_col:
+        income_birthday = st.date_input(
+            "Birthday", value=date(1990, 1, 1), min_value=date(1930, 1, 1), max_value=date.today(),
+            key="income_birthday",
+        )
 
-        with col1:
-            name = st.text_input("Name")
-            birthday = st.date_input(
-                "Birthday", value=date(1990, 1, 1), min_value=date(1930, 1, 1), max_value=date.today()
+    col1, col2 = st.columns(2)
+    with col1:
+        income_salary = st.number_input(
+            "Salary ($/yr)", min_value=0.0, value=0.0, step=1000.0, key="income_salary"
+        )
+        income_contribution_pct = st.number_input(
+            "401k Contribution (%)", min_value=0.0, max_value=100.0, value=6.0, key="income_contribution_pct"
+        )
+        income_hsa_monthly = st.number_input(
+            "Monthly HSA Contribution ($)", min_value=0.0, value=0.0, step=25.0, key="income_hsa_monthly"
+        )
+        income_medical_monthly = st.number_input(
+            "Medical Insurance ($/mo)", min_value=0.0, value=0.0, step=25.0, key="income_medical_monthly"
+        )
+
+    with col2:
+        tax_rate_key = "income_tax_rate_input"
+        income_tax_rate_pct = st.number_input(
+            "Effective Tax Rate (%)", min_value=0.0, max_value=60.0,
+            value=st.session_state.get(tax_rate_key, 22.0), step=0.5, key=tax_rate_key,
+        )
+        with st.popover("Estimate my rate"):
+            st.caption("Approximate federal + state effective rate, for planning only — not tax advice.")
+            est_state = st.selectbox(
+                "State", sorted(STATE_TAX_RATES.keys()), key="income_tax_state"
             )
-            retirement_age = st.number_input("Retirement / Draw Age", min_value=1, max_value=100, value=65)
-            stop_contribution_age = st.number_input(
-                "Stop Contribution Age", min_value=1, max_value=100, value=65,
-                help="Age at which contributions and the employer match stop. Defaults to retirement age.",
+            est_filing_status = st.selectbox(
+                "Filing Status", FILING_STATUSES, key="income_tax_filing_status"
             )
+            if st.button("Estimate", key="income_tax_estimate_button"):
+                pretax_reductions = income_salary * income_contribution_pct / 100 + income_hsa_monthly * 12
+                estimated = estimate_effective_tax_rate(
+                    est_state, est_filing_status, income_salary, pretax_reductions
+                )
+                st.session_state[tax_rate_key] = round(estimated, 1)
+                st.rerun()
 
-        with col2:
-            current_balance = st.number_input("Current 401(k) Balance ($)", min_value=0.0, value=0.0, step=1000.0)
-            current_salary = st.number_input("Current Annual Salary ($)", min_value=0.0, value=0.0, step=1000.0)
-            account_type = st.radio("Account Type", ["Pre-tax", "Roth"], horizontal=True)
-
-        with col3:
-            contribution_pct = st.number_input("% of Salary Contributed", min_value=0.0, max_value=100.0, value=6.0)
-            match_pct = st.number_input("% of Salary Matched", min_value=0.0, max_value=100.0, value=3.0)
-            salary_increase_pct = st.number_input(
-                "Annual Salary Increase (%)", min_value=0.0, max_value=50.0, value=3.0
+        if income_salary > 0:
+            gross_monthly = income_salary / 12
+            contribution_monthly = gross_monthly * income_contribution_pct / 100
+            tax_monthly = gross_monthly * income_tax_rate_pct / 100
+            net_monthly = (
+                gross_monthly - contribution_monthly - income_hsa_monthly
+                - income_medical_monthly - tax_monthly
             )
-            growth_rate_pct = st.number_input("Annual Growth Rate (%)", min_value=0.0, max_value=50.0, value=7.0)
+            st.caption(f"Estimated net monthly income: **${net_monthly:,.0f}**")
 
-        submitted = st.form_submit_button("Add Person")
-        if submitted:
-            if not name.strip():
-                st.error("Name is required.")
-            else:
-                st.session_state.people.append({
-                    "id": str(uuid.uuid4()),
-                    "name": name.strip(),
-                    "birthday": birthday.isoformat(),
-                    "current_balance": current_balance,
-                    "current_salary": current_salary,
-                    "contribution_pct": contribution_pct,
-                    "match_pct": match_pct,
-                    "salary_increase_pct": salary_increase_pct,
-                    "growth_rate_pct": growth_rate_pct,
-                    "account_type": account_type,
-                    "retirement_age": retirement_age,
-                    "stop_contribution_age": stop_contribution_age,
-                    "scenarios": [],
-                })
-                save_people(st.session_state.people)
-                st.success(f"Added {name.strip()}.")
+    if st.button("Add Person", key="add_person_button"):
+        if not income_name.strip():
+            st.error("Name is required.")
+        else:
+            st.session_state.people.append({
+                "id": str(uuid.uuid4()),
+                "name": income_name.strip(),
+                "birthday": income_birthday.isoformat(),
+                "current_salary": income_salary,
+                "contribution_pct": income_contribution_pct,
+                "hsa_monthly": income_hsa_monthly,
+                "medical_insurance_monthly": income_medical_monthly,
+                "tax_rate_pct": income_tax_rate_pct,
+                # 401k-specific fields get sensible defaults here; configure
+                # them for real in the 401k section (Section 3).
+                "current_balance": 0.0,
+                "match_pct": 3.0,
+                "salary_increase_pct": 3.0,
+                "growth_rate_pct": 7.0,
+                "account_type": "Pre-tax",
+                "retirement_age": 65,
+                "stop_contribution_age": 65,
+                "scenarios": [],
+            })
+            save_people(st.session_state.people)
+            for reset_key in (
+                "income_name", "income_salary", "income_contribution_pct",
+                "income_hsa_monthly", "income_medical_monthly", tax_rate_key,
+            ):
+                st.session_state.pop(reset_key, None)
+            st.success(f"Added {income_name.strip()}.")
+            st.rerun()
 
 st.divider()
 
 if not st.session_state.people:
     st.info("No people added yet. Use the form above to add someone.")
+else:
+    st.subheader("People")
+    for person in list(st.session_state.people):
+        normalize_person(person)
+        with st.expander(f"{person['name']} — ${person['current_salary']:,.0f}/yr", expanded=False):
+            edit_col, delete_col = st.columns([5, 1])
+            with edit_col:
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    edit_salary = st.number_input(
+                        "Salary ($/yr)", min_value=0.0, value=float(person["current_salary"]),
+                        step=1000.0, key=f"edit_income_salary_{person['id']}",
+                    )
+                    edit_contribution_pct = st.number_input(
+                        "401k Contribution (%)", min_value=0.0, max_value=100.0,
+                        value=float(person["contribution_pct"]), key=f"edit_income_contrib_{person['id']}",
+                    )
+                with ec2:
+                    edit_hsa_monthly = st.number_input(
+                        "Monthly HSA Contribution ($)", min_value=0.0,
+                        value=float(person.get("hsa_monthly", 0.0)), step=25.0,
+                        key=f"edit_income_hsa_{person['id']}",
+                    )
+                    edit_medical_monthly = st.number_input(
+                        "Medical Insurance ($/mo)", min_value=0.0,
+                        value=float(person.get("medical_insurance_monthly", 0.0)), step=25.0,
+                        key=f"edit_income_medical_{person['id']}",
+                    )
+                edit_tax_rate_pct = st.number_input(
+                    "Effective Tax Rate (%)", min_value=0.0, max_value=60.0,
+                    value=float(person.get("tax_rate_pct", 22.0)), step=0.5,
+                    key=f"edit_income_tax_{person['id']}",
+                )
+
+                gross_monthly = edit_salary / 12
+                net_monthly = (
+                    gross_monthly - gross_monthly * edit_contribution_pct / 100
+                    - edit_hsa_monthly - edit_medical_monthly - gross_monthly * edit_tax_rate_pct / 100
+                )
+                st.caption(f"Estimated net monthly income: **${net_monthly:,.0f}**")
+
+                if st.button("Save Changes", key=f"save_income_{person['id']}"):
+                    person["current_salary"] = edit_salary
+                    person["contribution_pct"] = edit_contribution_pct
+                    person["hsa_monthly"] = edit_hsa_monthly
+                    person["medical_insurance_monthly"] = edit_medical_monthly
+                    person["tax_rate_pct"] = edit_tax_rate_pct
+                    save_people(st.session_state.people)
+                    st.rerun()
+
+            with delete_col:
+                if st.button("Delete", key=f"delete_income_{person['id']}"):
+                    st.session_state.people = [
+                        p for p in st.session_state.people if p["id"] != person["id"]
+                    ]
+                    save_people(st.session_state.people)
+                    st.rerun()
+
+
+# ==========================================================================
+# Section 2: Household Expenses
+# ==========================================================================
+
+st.divider()
+st.title("Household Expenses")
+st.caption(f"Section 2: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}")
+
+default_current_age = (
+    calculate_age(date.fromisoformat(st.session_state.people[0]["birthday"]))
+    if st.session_state.people else 35
+)
+current_age_for_expenses = st.number_input(
+    "Current Age (for this projection)",
+    min_value=1,
+    max_value=EXPENSE_HORIZON_AGE - 1,
+    value=min(default_current_age, EXPENSE_HORIZON_AGE - 1),
+    key="expenses_current_age",
+)
+
+with st.expander("Add an Expense", expanded=not st.session_state.expenses):
+    type_col, amount_col = st.columns(2)
+    with type_col:
+        expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
+    is_loan_type = expense_type in LOAN_EXPENSE_TYPES
+    with amount_col:
+        monthly_amount = st.number_input(
+            "Current Monthly Payment ($)" if is_loan_type else "Monthly Value ($)",
+            min_value=0.0, value=0.0, step=50.0, key="expense_monthly_amount",
+        )
+
+    is_perpetuity = True
+    start_age_input = None
+    stop_age_input = None
+    apply_inflation = False
+    inflation_rate = 0.0
+    remaining_term_years = None
+
+    if is_loan_type:
+        remaining_term_years = st.number_input(
+            "Remaining Term (Years)", min_value=0, max_value=50, value=15, step=1,
+            key="expense_remaining_term",
+        )
+        st.caption("Loan payments are fixed (no inflation) and fall off automatically once the term ends.")
+    else:
+        is_perpetuity = st.checkbox(
+            "Perpetuity (runs the whole projection)", value=True, key="expense_perpetuity"
+        )
+        if not is_perpetuity:
+            start_col, stop_col = st.columns(2)
+            with start_col:
+                start_age_input = st.number_input(
+                    "Start Age", min_value=1, max_value=100, value=int(current_age_for_expenses),
+                    key="expense_start_age",
+                )
+            with stop_col:
+                stop_age_input = st.number_input(
+                    "Stop Age", min_value=1, max_value=100,
+                    value=min(int(current_age_for_expenses) + 10, 100), key="expense_stop_age",
+                )
+        apply_inflation = st.checkbox("Apply Inflation", value=True, key="expense_apply_inflation")
+        if apply_inflation:
+            inflation_rate = st.number_input(
+                "Inflation Rate (%)", min_value=0.0, max_value=20.0, value=3.0, step=0.1,
+                key="expense_inflation_rate",
+            )
+
+    if st.button("Add Expense", key="add_expense_button"):
+        st.session_state.expenses.append({
+            "id": str(uuid.uuid4()),
+            "type": expense_type,
+            "monthly_amount": monthly_amount,
+            "is_loan": is_loan_type,
+            "remaining_term_years": remaining_term_years,
+            "is_perpetuity": is_perpetuity,
+            "start_age": start_age_input,
+            "stop_age": stop_age_input,
+            "apply_inflation": apply_inflation,
+            "inflation_rate": inflation_rate,
+        })
+        save_expenses(st.session_state.expenses)
+        st.rerun()
+
+st.divider()
+
+if not st.session_state.expenses:
+    st.info("No expenses added yet. Use the form above to add one.")
+else:
+    st.subheader("Expenses")
+    for expense in st.session_state.expenses:
+        e_col, remove_col = st.columns([5, 1])
+        e_col.markdown(f"**{expense['type']}** — {describe_expense(expense)}")
+        if remove_col.button("Remove", key=f"remove_expense_{expense['id']}"):
+            st.session_state.expenses = [
+                e for e in st.session_state.expenses if e["id"] != expense["id"]
+            ]
+            save_expenses(st.session_state.expenses)
+            st.rerun()
+
+    st.divider()
+    st.subheader("Projected Household Expenses")
+    expense_chart_df = build_expense_chart_df(
+        st.session_state.expenses, int(current_age_for_expenses), EXPENSE_HORIZON_AGE
+    )
+    if expense_chart_df.empty:
+        st.info("No active expenses in the selected age range.")
+    else:
+        expense_chart = (
+            alt.Chart(expense_chart_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("Age:O", title="Age"),
+                y=alt.Y("Cost:Q", title="Annual Cost ($)", stack="zero", axis=alt.Axis(format="$,.2s")),
+                color=alt.Color(
+                    "Type:N",
+                    scale=alt.Scale(domain=EXPENSE_TYPES, range=[EXPENSE_PALETTE[t] for t in EXPENSE_TYPES]),
+                    sort=EXPENSE_TYPES,
+                    legend=alt.Legend(title=None, orient="bottom", labelLimit=200, labelFontSize=12, columns=4),
+                ),
+                tooltip=[
+                    alt.Tooltip("Age:O"),
+                    alt.Tooltip("Type:N"),
+                    alt.Tooltip("Cost:Q", format="$,.0f"),
+                ],
+            )
+            .properties(height=440)
+        )
+        st.altair_chart(expense_chart, width="stretch")
+
+
+# ==========================================================================
+# Section 3: 401(k) Planner
+# ==========================================================================
+
+st.divider()
+st.title("401(k) Planner")
+st.caption("Section 3: Individual 401(k) inputs and balance projection")
+
+if not st.session_state.people:
+    st.info("No people yet — add someone in the Income section above.")
 else:
     st.subheader("People")
 
@@ -529,9 +844,55 @@ else:
                 m6.metric("Salary Increase", f"{person['salary_increase_pct']}%")
                 m7.metric("Growth Rate", f"{person['growth_rate_pct']}%")
 
-                st.caption(f"Account type: {person['account_type']}")
+                st.caption(
+                    f"Account type: {person['account_type']} • "
+                    "Salary and 401k contribution % are set in the Income section"
+                )
 
             with action_col:
+                with st.popover("Edit"):
+                    st.markdown("**Edit 401k Details**")
+                    edit_balance = st.number_input(
+                        "Current 401(k) Balance ($)", min_value=0.0, value=float(person["current_balance"]),
+                        step=1000.0, key=f"edit_401k_balance_{person['id']}",
+                    )
+                    edit_match_pct = st.number_input(
+                        "% of Salary Matched", min_value=0.0, max_value=100.0,
+                        value=float(person["match_pct"]), key=f"edit_401k_match_{person['id']}",
+                    )
+                    edit_salary_increase_pct = st.number_input(
+                        "Annual Salary Increase (%)", min_value=0.0, max_value=50.0,
+                        value=float(person["salary_increase_pct"]), key=f"edit_401k_raise_{person['id']}",
+                    )
+                    edit_growth_rate_pct = st.number_input(
+                        "Annual Growth Rate (%)", min_value=0.0, max_value=50.0,
+                        value=float(person["growth_rate_pct"]), key=f"edit_401k_growth_{person['id']}",
+                    )
+                    edit_account_type = st.radio(
+                        "Account Type", ["Pre-tax", "Roth"],
+                        index=["Pre-tax", "Roth"].index(person["account_type"]),
+                        key=f"edit_401k_account_type_{person['id']}", horizontal=True,
+                    )
+                    edit_retirement_age = st.number_input(
+                        "Retirement / Draw Age", min_value=1, max_value=100,
+                        value=int(person["retirement_age"]), key=f"edit_401k_retirement_{person['id']}",
+                    )
+                    edit_stop_contribution_age = st.number_input(
+                        "Stop Contribution Age", min_value=1, max_value=100,
+                        value=int(person["stop_contribution_age"]), key=f"edit_401k_stop_{person['id']}",
+                        help="Age at which contributions and the employer match stop.",
+                    )
+                    if st.button("Save", key=f"save_401k_{person['id']}"):
+                        person["current_balance"] = edit_balance
+                        person["match_pct"] = edit_match_pct
+                        person["salary_increase_pct"] = edit_salary_increase_pct
+                        person["growth_rate_pct"] = edit_growth_rate_pct
+                        person["account_type"] = edit_account_type
+                        person["retirement_age"] = edit_retirement_age
+                        person["stop_contribution_age"] = edit_stop_contribution_age
+                        save_people(st.session_state.people)
+                        st.rerun()
+
                 if st.button("Delete", key=f"delete_{person['id']}"):
                     st.session_state.people = [
                         p for p in st.session_state.people if p["id"] != person["id"]
@@ -764,133 +1125,3 @@ else:
         s3.metric("Maximum Scenario", "—", help="Too many scenario combinations to compute")
 
     render_household_combinations(combo_data, total_combos)
-
-
-# ==========================================================================
-# Section 2: Household Expenses
-# ==========================================================================
-
-st.divider()
-st.title("Household Expenses")
-st.caption(f"Section 2: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}")
-
-default_current_age = (
-    calculate_age(date.fromisoformat(st.session_state.people[0]["birthday"]))
-    if st.session_state.people else 35
-)
-current_age_for_expenses = st.number_input(
-    "Current Age (for this projection)",
-    min_value=1,
-    max_value=EXPENSE_HORIZON_AGE - 1,
-    value=min(default_current_age, EXPENSE_HORIZON_AGE - 1),
-    key="expenses_current_age",
-)
-
-with st.expander("Add an Expense", expanded=not st.session_state.expenses):
-    type_col, amount_col = st.columns(2)
-    with type_col:
-        expense_type = st.selectbox("Expense Type", EXPENSE_TYPES, key="expense_type_select")
-    is_loan_type = expense_type in LOAN_EXPENSE_TYPES
-    with amount_col:
-        monthly_amount = st.number_input(
-            "Current Monthly Payment ($)" if is_loan_type else "Monthly Value ($)",
-            min_value=0.0, value=0.0, step=50.0, key="expense_monthly_amount",
-        )
-
-    is_perpetuity = True
-    start_age_input = None
-    stop_age_input = None
-    apply_inflation = False
-    inflation_rate = 0.0
-    remaining_term_years = None
-
-    if is_loan_type:
-        remaining_term_years = st.number_input(
-            "Remaining Term (Years)", min_value=0, max_value=50, value=15, step=1,
-            key="expense_remaining_term",
-        )
-        st.caption("Loan payments are fixed (no inflation) and fall off automatically once the term ends.")
-    else:
-        is_perpetuity = st.checkbox(
-            "Perpetuity (runs the whole projection)", value=True, key="expense_perpetuity"
-        )
-        if not is_perpetuity:
-            start_col, stop_col = st.columns(2)
-            with start_col:
-                start_age_input = st.number_input(
-                    "Start Age", min_value=1, max_value=100, value=int(current_age_for_expenses),
-                    key="expense_start_age",
-                )
-            with stop_col:
-                stop_age_input = st.number_input(
-                    "Stop Age", min_value=1, max_value=100,
-                    value=min(int(current_age_for_expenses) + 10, 100), key="expense_stop_age",
-                )
-        apply_inflation = st.checkbox("Apply Inflation", value=True, key="expense_apply_inflation")
-        if apply_inflation:
-            inflation_rate = st.number_input(
-                "Inflation Rate (%)", min_value=0.0, max_value=20.0, value=3.0, step=0.1,
-                key="expense_inflation_rate",
-            )
-
-    if st.button("Add Expense", key="add_expense_button"):
-        st.session_state.expenses.append({
-            "id": str(uuid.uuid4()),
-            "type": expense_type,
-            "monthly_amount": monthly_amount,
-            "is_loan": is_loan_type,
-            "remaining_term_years": remaining_term_years,
-            "is_perpetuity": is_perpetuity,
-            "start_age": start_age_input,
-            "stop_age": stop_age_input,
-            "apply_inflation": apply_inflation,
-            "inflation_rate": inflation_rate,
-        })
-        save_expenses(st.session_state.expenses)
-        st.rerun()
-
-st.divider()
-
-if not st.session_state.expenses:
-    st.info("No expenses added yet. Use the form above to add one.")
-else:
-    st.subheader("Expenses")
-    for expense in st.session_state.expenses:
-        e_col, remove_col = st.columns([5, 1])
-        e_col.markdown(f"**{expense['type']}** — {describe_expense(expense)}")
-        if remove_col.button("Remove", key=f"remove_expense_{expense['id']}"):
-            st.session_state.expenses = [
-                e for e in st.session_state.expenses if e["id"] != expense["id"]
-            ]
-            save_expenses(st.session_state.expenses)
-            st.rerun()
-
-    st.divider()
-    st.subheader("Projected Household Expenses")
-    expense_chart_df = build_expense_chart_df(
-        st.session_state.expenses, int(current_age_for_expenses), EXPENSE_HORIZON_AGE
-    )
-    if expense_chart_df.empty:
-        st.info("No active expenses in the selected age range.")
-    else:
-        expense_chart = (
-            alt.Chart(expense_chart_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("Age:O", title="Age"),
-                y=alt.Y("Cost:Q", title="Annual Cost ($)", stack="zero", axis=alt.Axis(format="$,.2s")),
-                color=alt.Color(
-                    "Type:N",
-                    scale=alt.Scale(domain=EXPENSE_TYPES, range=[EXPENSE_PALETTE[t] for t in EXPENSE_TYPES]),
-                    sort=EXPENSE_TYPES,
-                    legend=alt.Legend(title=None, orient="bottom", labelLimit=200, labelFontSize=12, columns=4),
-                ),
-                tooltip=[
-                    alt.Tooltip("Age:O"),
-                    alt.Tooltip("Type:N"),
-                    alt.Tooltip("Cost:Q", format="$,.0f"),
-                ],
-            )
-            .properties(height=440)
-        )
-        st.altair_chart(expense_chart, width="stretch")
