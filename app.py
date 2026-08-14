@@ -519,6 +519,78 @@ def describe_expense(expense: dict) -> str:
     return f"{monthly_txt} — {timing} — {inflation_txt}"
 
 
+def project_household_net_income_by_age(people: list[dict], current_age: int, horizon_age: int) -> dict[int, float]:
+    """Combined take-home income by household reference age, summed across
+    everyone. Each person's own salary grows at their own raise assumption
+    and stops the year they pass their own retirement age (not the
+    household reference age, since people can be different ages)."""
+    totals = {age: 0.0 for age in range(current_age, horizon_age + 1)}
+    for person in people:
+        person_age = calculate_age(date.fromisoformat(person["birthday"]))
+        salary = person["current_salary"]
+        for i, age in enumerate(range(current_age, horizon_age + 1)):
+            if person_age + i <= person["retirement_age"]:
+                gross = salary
+                contribution = gross * person["contribution_pct"] / 100
+                tax = gross * person.get("tax_rate_pct", 22.0) / 100
+                hsa_annual = person.get("hsa_monthly", 0.0) * 12
+                medical_annual = person.get("medical_insurance_monthly", 0.0) * 12
+                totals[age] += gross - contribution - hsa_annual - medical_annual - tax
+            salary *= 1 + person["salary_increase_pct"] / 100
+    return totals
+
+
+def project_household_total_expenses_by_age(expenses: list[dict], current_age: int, horizon_age: int) -> dict[int, float]:
+    totals = {age: 0.0 for age in range(current_age, horizon_age + 1)}
+    for expense in expenses:
+        for age, cost in project_expense_annual_costs(expense, current_age, horizon_age).items():
+            totals[age] += cost
+    return totals
+
+
+def render_income_vs_expenses_chart(
+    people: list[dict], expenses: list[dict], current_age: int, horizon_age: int
+) -> None:
+    """Household net income and total expenses as lines, and the resulting
+    surplus/deficit (income minus expenses) as bars, all on one chart."""
+    income_by_age = project_household_net_income_by_age(people, current_age, horizon_age)
+    expenses_by_age = project_household_total_expenses_by_age(expenses, current_age, horizon_age)
+
+    ages = list(range(current_age, horizon_age + 1))
+    cash_df = pd.DataFrame({
+        "Age": ages,
+        "Income": [income_by_age[a] for a in ages],
+        "Expenses": [expenses_by_age[a] for a in ages],
+    })
+    cash_df["Net"] = cash_df["Income"] - cash_df["Expenses"]
+    cash_df["NetSign"] = cash_df["Net"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
+    lines_df = cash_df.melt(id_vars="Age", value_vars=["Income", "Expenses"], var_name="Series", value_name="Amount")
+
+    bar_chart = alt.Chart(cash_df).mark_bar(opacity=0.55).encode(
+        x=alt.X("Age:O", title="Age"),
+        y=alt.Y("Net:Q", title="Amount ($)", axis=alt.Axis(format="$,.2s")),
+        color=alt.Color(
+            "NetSign:N",
+            scale=alt.Scale(domain=["Surplus", "Deficit"], range=["#1a7f37", "#cf222e"]),
+            legend=alt.Legend(title=None, orient="bottom", labelFontSize=12),
+        ),
+        tooltip=[alt.Tooltip("Age:O"), alt.Tooltip("Net:Q", title="Net", format="$,.0f")],
+    )
+    line_chart = alt.Chart(lines_df).mark_line(strokeWidth=3).encode(
+        x=alt.X("Age:O"),
+        y=alt.Y("Amount:Q"),
+        color=alt.Color(
+            "Series:N",
+            scale=alt.Scale(domain=["Income", "Expenses"], range=["#2563eb", "#d97706"]),
+            legend=alt.Legend(title=None, orient="bottom", labelFontSize=12),
+        ),
+        tooltip=[alt.Tooltip("Series:N"), alt.Tooltip("Age:O"), alt.Tooltip("Amount:Q", format="$,.0f")],
+    )
+
+    combined = (bar_chart + line_chart).resolve_scale(color="independent").properties(height=440)
+    st.altair_chart(combined, width="stretch")
+
+
 # ---------- UI ----------
 
 # ==========================================================================
@@ -826,6 +898,17 @@ else:
             .properties(height=440)
         )
         st.altair_chart(expense_chart, width="stretch")
+
+    st.divider()
+    st.subheader("Household Income vs. Expenses")
+    st.caption(
+        "Combined take-home income and total expenses by age, with the surplus or deficit "
+        "(income minus expenses) shown as bars."
+    )
+    render_income_vs_expenses_chart(
+        st.session_state.people, st.session_state.expenses,
+        int(current_age_for_expenses), EXPENSE_HORIZON_AGE,
+    )
 
 
 # ==========================================================================
