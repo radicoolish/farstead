@@ -1,0 +1,110 @@
+// Core data model. Mirrors the Streamlit app's people.json / expenses.json
+// shape (see ../../../app.py), translated to camelCase. Not required to be
+// byte-compatible with that JSON — an import/export bridge is a separate
+// concern for later, if the two apps ever need to exchange files directly.
+
+export type AccountType = "Pre-tax" | "Roth";
+
+/** A step change to a new, flat salary at a given age, held through
+ * retirement — the "Different Income Until Retirement" scenario type.
+ * Missing rate fields fall back to whatever the person's own current
+ * rates are at the time the change triggers. */
+export interface IncomeChange {
+  age: number;
+  newSalary: number;
+  contributionPct?: number;
+  matchPct?: number;
+  salaryIncreasePct?: number;
+}
+
+/** Every field a scenario or the Simulator is allowed to override on a
+ * Person, for a single point-in-time "what if". `incomeChange`, if present,
+ * additionally steps salary (and optionally contribution/match/raise) at a
+ * given age — see `IncomeChange`. */
+export interface PersonOverrides {
+  currentSalary?: number;
+  contributionPct?: number;
+  matchPct?: number;
+  salaryIncreasePct?: number;
+  growthRatePct?: number;
+  currentBalance?: number;
+  accountType?: AccountType;
+  retirementAge?: number;
+  stopContributionAge?: number;
+  hsaMonthly?: number;
+  medicalInsuranceMonthly?: number;
+  taxRatePct?: number;
+  socialSecurityClaimAge?: number;
+  socialSecurityMonthly?: number;
+  incomeChange?: IncomeChange;
+}
+
+/** A named, saved single-field (or income-change) override — up to 4 per
+ * person. `field` is whichever key of `PersonOverrides` this scenario
+ * varies ("incomeChange" for the income-change type). */
+export interface Scenario {
+  id: string;
+  name: string;
+  detail: string;
+  field: keyof PersonOverrides;
+  value: number | IncomeChange;
+}
+
+export interface Person {
+  id: string;
+  name: string;
+  birthday: string; // ISO date, e.g. "1990-01-01"
+  currentSalary: number;
+  contributionPct: number;
+  matchPct: number;
+  salaryIncreasePct: number;
+  growthRatePct: number;
+  currentBalance: number;
+  accountType: AccountType;
+  retirementAge: number;
+  stopContributionAge: number;
+  hsaMonthly: number;
+  medicalInsuranceMonthly: number;
+  taxRatePct: number;
+  socialSecurityClaimAge: number;
+  socialSecurityMonthly: number;
+  scenarios: Scenario[];
+}
+
+export const EXPENSE_TYPES = [
+  "Mortgage", "Heloc/Loans", "Auto Loans", "Utilities", "Groceries",
+  "Health Insurance", "Property Taxes", "Life Insurance", "Student Loans",
+  "Gas", "529 / College Savings", "Daycare", "Other Costs",
+] as const;
+
+export type ExpenseType = (typeof EXPENSE_TYPES)[number];
+
+export const LOAN_EXPENSE_TYPES: ReadonlySet<ExpenseType> = new Set([
+  "Mortgage", "Heloc/Loans", "Auto Loans", "Student Loans",
+]);
+
+export interface Expense {
+  id: string;
+  type: ExpenseType;
+  monthlyAmount: number;
+  isLoan: boolean;
+  remainingTermYears?: number;
+  isPerpetuity: boolean;
+  startAge?: number;
+  stopAge?: number;
+  applyInflation: boolean;
+  inflationRate: number;
+}
+
+export const EXPENSE_HORIZON_AGE = 85;
+
+/** A single point on a year-by-year 401(k) balance projection. */
+export interface BalancePoint {
+  age: number;
+  year: number;
+  balance: number;
+}
+
+/** {age: amount} — every household-level projection function returns this
+ * shape so callers can zip several of them together by age. */
+export type ByAge = Map<number, number>;
