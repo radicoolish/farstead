@@ -4,6 +4,9 @@ import { useAppData } from "../state/AppDataContext";
 import { ExpenseForm } from "./ExpenseForm";
 import { ExpenseChart } from "./ExpenseChart";
 import { HouseholdCashFlowCharts } from "./HouseholdCashFlowCharts";
+import { SECTION_META } from "./AppNav";
+
+const { Icon } = SECTION_META.expenses;
 
 /** Section 3: Household Expenses. Expense CRUD, the stacked expense chart,
  * and — sharing the same Current Age — the household-wide Income vs.
@@ -21,9 +24,12 @@ export function ExpensesSection() {
 
   return (
     <section>
-      <h2>Household Expenses</h2>
+      <h2 className="section-title">
+        <Icon className="section-title-icon" />
+        Household Expenses
+      </h2>
       <p className="caption">
-        Section 3: Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}
+        Recurring and loan-based household expenses, projected by age up to {EXPENSE_HORIZON_AGE}
       </p>
 
       <div className="field" style={{ maxWidth: 260 }}>

@@ -87,13 +87,13 @@ export function SimulatorCharts({
         <DualLineChart data={incomeRows} color="#2563eb" />
       </ChartCard>
       <ChartCard title="401k Withdrawal">
-        <DualLineChart data={withdrawalRows} color="#7c3aed" />
+        <DualLineChart data={withdrawalRows} color="#16a34a" />
       </ChartCard>
       <ChartCard title="Social Security">
-        <DualLineChart data={ssRows} color="#0891b2" />
+        <DualLineChart data={ssRows} color="#0d9488" />
       </ChartCard>
       <ChartCard title="Surplus / Deficit">
-        <DualLineChart data={surplusRows} color="#1a7f37" />
+        <DualLineChart data={surplusRows} color="#16a34a" />
       </ChartCard>
     </ChartGrid>
   );

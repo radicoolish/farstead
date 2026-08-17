@@ -7,8 +7,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /** Data Management: export the whole household to a JSON file, import one
  * back (replacing current data, after a preview + confirm), and a
- * confirm-gated Clear All. Mirrors app.py's sidebar Data Management panel,
- * surfaced here as a top-of-page section since this layout has no sidebar. */
+ * confirm-gated Clear All. Rendered inside a Modal (see App.tsx) rather
+ * than as a permanent on-page section, so it stays out of the way until
+ * actually needed — the modal supplies its own title/close chrome. */
 export function DataManagementSection() {
   const uid = useId();
   const id = (suffix: string) => `${uid}-${suffix}`;
@@ -89,9 +90,10 @@ export function DataManagementSection() {
   }
 
   return (
-    <section>
-      <h2>Data Management</h2>
-      <p className="caption">Save your household to a file, load a prior file, or start over.</p>
+    <div>
+      <p className="caption" style={{ marginTop: 0, marginBottom: "1rem" }}>
+        Save your household to a file, load a prior file, or start over.
+      </p>
 
       <div className="field-row">
         <div className="card">
@@ -149,6 +151,6 @@ export function DataManagementSection() {
           </button>
         )}
       </div>
-    </section>
+    </div>
   );
 }

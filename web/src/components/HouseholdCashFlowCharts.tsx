@@ -75,13 +75,13 @@ export function HouseholdCashFlowCharts({
           <SingleLineChart data={data} dataKey="Income" color="#2563eb" />
         </ChartCard>
         <ChartCard title="Expenses">
-          <SingleLineChart data={data} dataKey="Expenses" color="#d97706" />
+          <SingleLineChart data={data} dataKey="Expenses" color="#64748b" />
         </ChartCard>
         <ChartCard title="401k Withdrawal">
-          <SingleLineChart data={data} dataKey="401k Withdrawal" color="#7c3aed" />
+          <SingleLineChart data={data} dataKey="401k Withdrawal" color="#16a34a" />
         </ChartCard>
         <ChartCard title="Social Security">
-          <SingleLineChart data={data} dataKey="Social Security" color="#0891b2" />
+          <SingleLineChart data={data} dataKey="Social Security" color="#0d9488" />
         </ChartCard>
       </ChartGrid>
       <div style={{ marginTop: "1rem" }}>

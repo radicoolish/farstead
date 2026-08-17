@@ -3,6 +3,9 @@ import { useAppData } from "../state/AppDataContext";
 import { PersonBalanceCard } from "./PersonBalanceCard";
 import { HouseholdComboChart } from "./HouseholdComboChart";
 import { MAX_HOUSEHOLD_COMBOS } from "../calc";
+import { SECTION_META } from "./AppNav";
+
+const { Icon } = SECTION_META["401k"];
 
 /** Section 2: 401(k) Planner. Per-person projection + scenarios, plus a
  * household-wide summary and scenario-combination chart. Mirrors app.py's
@@ -13,9 +16,12 @@ export function FourZeroOneKSection() {
   if (people.length === 0) {
     return (
       <section>
-        <h2>401(k) Planner</h2>
-        <p className="caption">Section 2: Individual 401(k) inputs and balance projection</p>
-        <p className="caption">No people yet — add someone in the Income section above.</p>
+        <h2 className="section-title">
+          <Icon className="section-title-icon" />
+          401(k) Planner
+        </h2>
+        <p className="caption">Individual 401(k) inputs and balance projection</p>
+        <p className="caption">No people yet — add someone in the Income section.</p>
       </section>
     );
   }
@@ -31,8 +37,11 @@ export function FourZeroOneKSection() {
 
   return (
     <section>
-      <h2>401(k) Planner</h2>
-      <p className="caption">Section 2: Individual 401(k) inputs and balance projection</p>
+      <h2 className="section-title">
+        <Icon className="section-title-icon" />
+        401(k) Planner
+      </h2>
+      <p className="caption">Individual 401(k) inputs and balance projection</p>
 
       <h3>People</h3>
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>

@@ -2,6 +2,9 @@ import { useState, type SyntheticEvent } from "react";
 import { useAppData } from "../state/AppDataContext";
 import { PersonForm } from "./PersonForm";
 import { PersonCard } from "./PersonCard";
+import { SECTION_META } from "./AppNav";
+
+const { Icon } = SECTION_META.income;
 
 /** Section 1: Household Income. Person creation via "Tell Me About
  * Yourself", plus the list of everyone already added. Mirrors app.py's
@@ -20,8 +23,11 @@ export function IncomeSection() {
 
   return (
     <section>
-      <h2>Household Income</h2>
-      <p className="caption">Section 1: Per-person income, paycheck deductions, and effective tax rate</p>
+      <h2 className="section-title">
+        <Icon className="section-title-icon" />
+        Household Income
+      </h2>
+      <p className="caption">Per-person income, paycheck deductions, and effective tax rate</p>
 
       <details className="panel" open={formOpen} onToggle={handleToggle}>
         <summary>Tell Me About Yourself</summary>

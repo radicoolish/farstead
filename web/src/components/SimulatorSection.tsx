@@ -4,6 +4,9 @@ import { useAppData } from "../state/AppDataContext";
 import { PersonSimulatorPanel } from "./PersonSimulatorPanel";
 import { SimulatorCharts } from "./SimulatorCharts";
 import { initialSimState, overridesFromSimState, type PersonSimState } from "../simulator/state";
+import { SECTION_META } from "./AppNav";
+
+const { Icon } = SECTION_META.simulator;
 
 /** Section 4: a fully sandboxed "what if" playground. Every field for
  * every person is freely editable here without touching saved data —
@@ -36,8 +39,11 @@ export function SimulatorSection() {
   if (people.length === 0) {
     return (
       <section>
-        <h2>Simulator</h2>
-        <p className="caption">Add someone in the Income section above to use the simulator.</p>
+        <h2 className="section-title">
+          <Icon className="section-title-icon" />
+          Simulator
+        </h2>
+        <p className="caption">Add someone in the Income section to use the simulator.</p>
       </section>
     );
   }
@@ -49,7 +55,10 @@ export function SimulatorSection() {
 
   return (
     <section>
-      <h2>Simulator</h2>
+      <h2 className="section-title">
+        <Icon className="section-title-icon" />
+        Simulator
+      </h2>
       <p className="caption">
         Freely adjust any input for any person to explore a "what if" — nothing here is saved. Compares against your
         actual, saved projection from the Household Expenses section above.
