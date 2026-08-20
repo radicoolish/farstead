@@ -102,58 +102,83 @@ export function computeSimulatorComparisonMetrics(
   return { combinedBalanceAtRetirement, yearsOfDraw, lastsFullHorizon };
 }
 
-/** Oldest age a retirement search bothers trying. Capped at
- * EXPENSE_HORIZON_AGE itself, not the 100 the Retirement Age sliders allow
- * elsewhere: past the horizon age, `computeSimulatorComparisonMetrics`'s
- * deficit-search window (boundaryAge..EXPENSE_HORIZON_AGE) becomes empty,
- * which makes `lastsFullHorizon` trivially true — a degenerate "you can
- * retire at 95!" answer with zero actual retirement years evaluated. */
-const MAX_SEARCHABLE_RETIREMENT_AGE = EXPENSE_HORIZON_AGE;
-
-export interface EarliestRetirementResult {
-  /** The earliest age (from this person's current age through
-   * MAX_SEARCHABLE_RETIREMENT_AGE) at which retiring still leaves income
-   * covering expenses all the way through EXPENSE_HORIZON_AGE — null if
-   * not achievable at any age in that range under current assumptions. */
-  earliestAge: number | null;
-  /** This person's own saved retirement age, for comparison. */
-  currentPlanAge: number;
-  /** currentPlanAge - earliestAge — positive means they could retire that
-   * many years earlier than currently planned; negative means their
-   * current plan is already earlier than what's actually sustainable.
-   * Null when earliestAge is null. */
+export interface HouseholdRetirementResult {
+  /** Fewest years from today (0..EXPENSE_HORIZON_AGE - currentAge) at which
+   * *everyone* in the household could retire simultaneously — same target
+   * year, not necessarily the same age — while household income still
+   * covers expenses every year from today through EXPENSE_HORIZON_AGE.
+   * Null if not achievable anywhere in that range under the given
+   * (possibly scenario-overridden) assumptions. */
+  earliestYearsOut: number | null;
+  /** Each person's resulting age at that shared target year — empty when
+   * earliestYearsOut is null. */
+  resultingAgeByPersonId: Record<string, number>;
+  /** Years from today until the household's *planned* settings have
+   * everyone retired — the latest of each person's own planned retirement
+   * age (their scenario override's, or their saved one) minus their
+   * current age. The baseline earliestYearsOut is compared against. */
+  plannedYearsOut: number;
+  /** plannedYearsOut - earliestYearsOut — positive means the household
+   * could retire together that many years sooner than planned; negative
+   * means the current plan isn't sustainable and would need that many more
+   * years. Null when earliestYearsOut is null. */
   yearsEarlier: number | null;
 }
 
-/** "When can I retire?" for one person — holds every other person's
- * (and this person's own every-other-field's) actual saved settings
- * fixed, and finds the earliest retirement age for just this person that
- * still keeps the household's income covering its expenses through
- * EXPENSE_HORIZON_AGE. A linear scan rather than a binary search: the
- * search range tops out around 60-70 candidate ages, cheap either way,
- * and a scan doesn't depend on proving the underlying relationship is
- * strictly monotonic (retiring later should only ever help — more
- * contribution/growth years, a shorter withdrawal period — but a scan
- * finds the right answer even if some edge case wobbles that). */
-export function findEarliestRetirementAge(
+/** "When can we retire?" at the household level: rather than optimizing
+ * one person at a time while holding everyone else's saved age fixed
+ * (which doesn't answer "when can we stop working together"), this
+ * searches for the earliest shared target year at which retiring
+ * *everyone* simultaneously — each person's own age offset by the same
+ * number of years from today — still keeps household income covering
+ * expenses every year from today through EXPENSE_HORIZON_AGE. Each
+ * person's other settings come from `scenarioOverridesByPersonId` (their
+ * chosen saved 401(k) scenario, or {} for Base) — only `retirementAge`
+ * gets overridden further by the search itself.
+ *
+ * Scans the full [currentAge, EXPENSE_HORIZON_AGE] range directly (not
+ * just from a "boundary age" onward) specifically so it doesn't need
+ * `householdRetirementBoundaryAge`'s per-person age numbers to line up
+ * with the shared household reference-age scale the by-age maps use —
+ * sidestepping that ambiguity entirely rather than relying on it holding
+ * for households of very differently-aged people. */
+export function findEarliestHouseholdRetirement(
   people: Person[],
   expenses: Expense[],
   currentAge: number,
   withdrawalRate: WithdrawalRate,
-  personId: string,
+  scenarioOverridesByPersonId: Record<string, PersonOverrides> = {},
   today: Date = new Date(),
-): EarliestRetirementResult {
-  const person = people.find((p) => p.id === personId);
-  if (!person) return { earliestAge: null, currentPlanAge: 0, yearsEarlier: null };
+): HouseholdRetirementResult {
+  if (people.length === 0) return { earliestYearsOut: null, resultingAgeByPersonId: {}, plannedYearsOut: 0, yearsEarlier: null };
 
-  const personAge = calculateAge(person.birthday, today);
-  const minAge = Math.max(personAge, 1);
+  const personAgeById = new Map(people.map((p) => [p.id, calculateAge(p.birthday, today)]));
+  const plannedYearsOut = Math.max(
+    0,
+    ...people.map((p) => {
+      const overrides = scenarioOverridesByPersonId[p.id] ?? {};
+      const plannedAge = overrides.retirementAge ?? p.retirementAge;
+      return plannedAge - personAgeById.get(p.id)!;
+    }),
+  );
 
-  for (let age = minAge; age <= MAX_SEARCHABLE_RETIREMENT_AGE; age++) {
-    const metrics = computeSimulatorComparisonMetrics(people, expenses, currentAge, withdrawalRate, { [personId]: { retirementAge: age } }, today);
-    if (metrics.lastsFullHorizon) {
-      return { earliestAge: age, currentPlanAge: person.retirementAge, yearsEarlier: person.retirementAge - age };
+  const maxYearsOut = Math.max(0, EXPENSE_HORIZON_AGE - currentAge);
+
+  for (let yearsOut = 0; yearsOut <= maxYearsOut; yearsOut++) {
+    const overridesByPersonId: Record<string, PersonOverrides> = {};
+    for (const p of people) {
+      overridesByPersonId[p.id] = { ...(scenarioOverridesByPersonId[p.id] ?? {}), retirementAge: personAgeById.get(p.id)! + yearsOut };
+    }
+    const incomeByAge = projectHouseholdNetIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
+    const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRate, overridesByPersonId, today);
+    const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
+    const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
+
+    if (firstDeficitAgeFrom(incomeByAge, withdrawalByAge, ssByAge, expensesByAge, currentAge, EXPENSE_HORIZON_AGE) === null) {
+      const resultingAgeByPersonId: Record<string, number> = {};
+      for (const p of people) resultingAgeByPersonId[p.id] = personAgeById.get(p.id)! + yearsOut;
+      return { earliestYearsOut: yearsOut, resultingAgeByPersonId, plannedYearsOut, yearsEarlier: plannedYearsOut - yearsOut };
     }
   }
-  return { earliestAge: null, currentPlanAge: person.retirementAge, yearsEarlier: null };
+  return { earliestYearsOut: null, resultingAgeByPersonId: {}, plannedYearsOut, yearsEarlier: null };
 }

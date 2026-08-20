@@ -4,9 +4,8 @@ const FEATURE_COPY: Record<(typeof SECTION_ORDER)[number], string> = {
   income: "Enter each person's salary, 401(k) contributions, and tax rate.",
   "401k": "See balances projected to retirement, plus what-if scenarios.",
   expenses: "Track recurring costs — mortgage, loans, insurance, and more.",
-  summary: "The big picture: combined income, expenses, and cash flow.",
+  summary: "Find your earliest sustainable retirement year, plus the big picture across income and expenses.",
   simulator: "Stress-test assumptions — market downturns, income changes.",
-  retire: "Find the earliest age you can actually afford to retire.",
 };
 
 /** First-run, full-screen intro — shown once (tracked via localStorage),

@@ -15,6 +15,7 @@ import {
 import { useAppData } from "../state/AppDataContext";
 import { resolveWithdrawalRate } from "../state/withdrawalRate";
 import { SECTION_META } from "./AppNav";
+import { HouseholdRetirementPanel } from "./HouseholdRetirementPanel";
 import { StatTile } from "./StatTile";
 import { ChartCard } from "../chart/ChartCard";
 import { AreaGradientDefs } from "../chart/AreaGradient";
@@ -57,9 +58,9 @@ export function SummarySection() {
       <section>
         <h2 className="section-title">
           <Icon className="section-title-icon" />
-          Summary
+          When Can I Retire?
         </h2>
-        <p className="caption">Add someone in the Income section to see your household summary.</p>
+        <p className="caption">Add someone in the Income section to find your earliest sustainable retirement year.</p>
       </section>
     );
   }
@@ -116,9 +117,19 @@ export function SummarySection() {
     <section>
       <h2 className="section-title">
         <Icon className="section-title-icon" />
-        Summary
+        When Can I Retire?
       </h2>
-      <p className="caption">The big picture across Income, 401(k), and Expenses — use the tabs above for the full detail behind any number here.</p>
+      <p className="caption">
+        Using your saved Income, 401(k), and Expenses assumptions — pick a scenario per person below, or see the
+        Simulator to freely test other changes.
+      </p>
+
+      <HouseholdRetirementPanel people={people} expenses={expenses} currentAge={currentAge} withdrawalRate={resolveWithdrawalRate(withdrawalRate)} />
+
+      <h3>Full Household Summary</h3>
+      <p className="caption" style={{ marginTop: 0 }}>
+        The big picture across Income, 401(k), and Expenses at your actual saved settings.
+      </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", margin: "1rem 0" }}>
         {(Object.keys(PERIOD_META) as Period[]).map((key) => {

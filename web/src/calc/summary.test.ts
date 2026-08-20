@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   averageOverRange,
   computeSimulatorComparisonMetrics,
-  findEarliestRetirementAge,
+  findEarliestHouseholdRetirement,
   firstDeficitAgeFrom,
   householdRetirementBoundaryAge,
 } from "./summary";
@@ -214,32 +214,121 @@ describe("computeSimulatorComparisonMetrics", () => {
   });
 });
 
-describe("findEarliestRetirementAge", () => {
+describe("findEarliestHouseholdRetirement", () => {
   const TODAY = new Date(2026, 7, 16); // 2026-08-16, matches projection.test.ts's convention
 
-  it("returns a null-safe result for an unknown person id", () => {
-    const alice = makePerson({ id: "alice" });
-    const result = findEarliestRetirementAge([alice], [], 40, { mode: "percent", value: 4 }, "nobody", TODAY);
-    expect(result).toEqual({ earliestAge: null, currentPlanAge: 0, yearsEarlier: null });
+  it("returns a null-safe result for an empty household", () => {
+    const result = findEarliestHouseholdRetirement([], [], 40, { mode: "percent", value: 4 }, {}, TODAY);
+    expect(result).toEqual({ earliestYearsOut: null, resultingAgeByPersonId: {}, plannedYearsOut: 0, yearsEarlier: null });
   });
 
-  it("finds the person's current age itself when retiring today already covers expenses", () => {
+  it("matches single-person hand-derived results (sanity check against the same fixed-dollar depletion math)", () => {
+    // Same setup as the old per-person search's exact-boundary test:
+    // growthRatePct 0 and matchPct 0 keep the balance trajectory exactly
+    // linear, so balance at yearsOut Y is exactly 10000*Y.
     const alice = makePerson({
       id: "alice",
       birthday: "1986-01-01", // age 40 at TODAY
-      retirementAge: 40,
+      retirementAge: 65,
       currentBalance: 0,
-      socialSecurityClaimAge: 40,
-      socialSecurityMonthly: 5000,
+      currentSalary: 100000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
     });
-    const expenses = [makeExpense({ monthlyAmount: 500 })];
-    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
-    expect(result.earliestAge).toBe(40);
-    expect(result.currentPlanAge).toBe(40);
-    expect(result.yearsEarlier).toBe(0);
+    // $4000/yr expenses against a fixed $5000/yr withdrawal: yearsOut=15
+    // (age 55) leaves $150,000, funding exactly 30 full withdrawals (the
+    // 45 - 15 remaining modeled years) with $0 left over; yearsOut=14
+    // leaves only $140,000, which runs dry one year short.
+    const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
+    const result = findEarliestHouseholdRetirement([alice], expenses, 40, { mode: "dollar", value: 5000 }, {}, TODAY);
+    expect(result.earliestYearsOut).toBe(15);
+    expect(result.resultingAgeByPersonId).toEqual({ alice: 55 });
+    expect(result.plannedYearsOut).toBe(25); // 65 - 40
+    expect(result.yearsEarlier).toBe(10);
   });
 
-  it("returns null when no age through the horizon achieves a sustainable retirement", () => {
+  it("finds the earliest year two differently-aged people can retire together", () => {
+    // Alice (40) contributes 10% of a flat $100k -> $10,000/yr to her
+    // balance; Bob (30) contributes 10% of a flat $60k -> $6,000/yr.
+    // Retiring both at the same yearsOut Y makes their withdrawal years
+    // start simultaneously too (personAge + Y - retirementAge lines up for
+    // both), so household withdrawal = up to $6,000/yr each = $12,000/yr
+    // against an $8,000/yr expense while both balances hold.
+    //
+    // Bob's balance (6000Y) depletes at fixed $6,000/yr withdrawals after
+    // exactly Y years — the binding constraint, since Alice's (10000Y)
+    // lasts longer. The household models 45 years (85 - currentAge 40),
+    // of which Y are pre-retirement, leaving 45-Y withdrawal years to
+    // cover: sustainable exactly when Y >= 45-Y, i.e. Y >= 22.5 -> Y=23.
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01", // age 40
+      retirementAge: 65,
+      currentBalance: 0,
+      currentSalary: 100000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    const bob = makePerson({
+      id: "bob",
+      birthday: "1996-01-01", // age 30
+      retirementAge: 65,
+      currentBalance: 0,
+      currentSalary: 60000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    const expenses = [makeExpense({ monthlyAmount: 8000 / 12 })];
+    const result = findEarliestHouseholdRetirement([alice, bob], expenses, 40, { mode: "dollar", value: 6000 }, {}, TODAY);
+    expect(result.earliestYearsOut).toBe(23);
+    expect(result.resultingAgeByPersonId).toEqual({ alice: 63, bob: 53 });
+    expect(result.plannedYearsOut).toBe(35); // max(65-40, 65-30)
+    expect(result.yearsEarlier).toBe(12);
+  });
+
+  it("applies a per-person scenario override on top of their saved settings", () => {
+    // Same Alice as the single-person case, but with a scenario that
+    // starts her off with a $75,000 head start. Balance at yearsOut Y is
+    // now 75000 + 10000Y; sustainable once that covers (45-Y) years of
+    // $5,000 withdrawals: 75000+10000Y >= 5000(45-Y) -> Y >= 10 exactly
+    // (175,000 covers 35 remaining years of $5,000 exactly).
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01",
+      retirementAge: 65,
+      currentBalance: 0,
+      currentSalary: 100000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
+    const result = findEarliestHouseholdRetirement(
+      [alice],
+      expenses,
+      40,
+      { mode: "dollar", value: 5000 },
+      { alice: { currentBalance: 75000 } },
+      TODAY,
+    );
+    expect(result.earliestYearsOut).toBe(10);
+    expect(result.resultingAgeByPersonId).toEqual({ alice: 50 });
+    expect(result.plannedYearsOut).toBe(25); // scenario didn't touch retirementAge
+    expect(result.yearsEarlier).toBe(15);
+  });
+
+  it("returns null when no shared retirement year is sustainable through the horizon", () => {
     const alice = makePerson({
       id: "alice",
       birthday: "1986-01-01",
@@ -250,65 +339,14 @@ describe("findEarliestRetirementAge", () => {
       salaryIncreasePct: 0, // flat $100k salary, net ~$80k/yr after 20% tax
       socialSecurityMonthly: 0,
     });
-    // $200k/yr expenses dwarf even Alice's peak earned income, so every
-    // candidate retirement age (including the boundary age itself, where
-    // earned income still counts for that one year) shows a deficit.
-    const expenses = [makeExpense({ monthlyAmount: 200000 / 12 })];
-    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
-    expect(result.earliestAge).toBeNull();
+    // $500k/yr expenses dwarf even Alice's peak earned income, so every
+    // candidate yearsOut (including working all the way to the horizon,
+    // where the search never actually models a withdrawal year) shows a
+    // deficit.
+    const expenses = [makeExpense({ monthlyAmount: 500000 / 12 })];
+    const result = findEarliestHouseholdRetirement([alice], expenses, 40, { mode: "percent", value: 4 }, {}, TODAY);
+    expect(result.earliestYearsOut).toBeNull();
+    expect(result.resultingAgeByPersonId).toEqual({});
     expect(result.yearsEarlier).toBeNull();
-  });
-
-  it("finds the exact earliest age a fixed-dollar withdrawal can sustain expenses through the horizon", () => {
-    // growthRatePct 0 and matchPct 0 keep the balance trajectory exactly
-    // linear: contributing 10% of a flat $100k salary each year Alice works
-    // adds exactly $10,000/year to her balance, so her balance at
-    // retirement age R is exactly 10000 * (R - 40).
-    const alice = makePerson({
-      id: "alice",
-      birthday: "1986-01-01", // age 40 at TODAY
-      retirementAge: 65, // her own saved plan, for comparison
-      currentBalance: 0,
-      currentSalary: 100000,
-      contributionPct: 10,
-      matchPct: 0,
-      salaryIncreasePct: 0,
-      growthRatePct: 0,
-      socialSecurityMonthly: 0,
-    });
-    // $4000/yr recurring expenses against a fixed $5000/yr withdrawal:
-    // - Retiring at 55 leaves a balance of 10000*(55-40) = $150,000, which
-    //   funds exactly 30 full $5000 withdrawals (ages 56-85) with $0 left
-    //   over — covers every year through the horizon.
-    // - Retiring at 54 leaves only $140,000, which funds 28 full
-    //   withdrawals then runs dry partway through age 83, leaving that
-    //   year's withdrawal short of the $4000 expense.
-    const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
-    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "dollar", value: 5000 }, "alice", TODAY);
-    expect(result.earliestAge).toBe(55);
-    expect(result.currentPlanAge).toBe(65);
-    expect(result.yearsEarlier).toBe(10);
-  });
-
-  it("holds other household members' settings fixed while searching one person's age", () => {
-    const alice = makePerson({
-      id: "alice",
-      birthday: "1986-01-01", // age 40 at TODAY
-      retirementAge: 40,
-      currentBalance: 0,
-      socialSecurityClaimAge: 40,
-      socialSecurityMonthly: 5000, // covers expenses alone, regardless of bob
-    });
-    const bob = makePerson({
-      id: "bob",
-      birthday: "1986-01-01",
-      retirementAge: 70, // bob's own saved plan is untouched by alice's search
-      currentBalance: 0,
-      socialSecurityMonthly: 0,
-    });
-    const expenses = [makeExpense({ monthlyAmount: 500 })];
-    const result = findEarliestRetirementAge([alice, bob], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
-    expect(result.earliestAge).toBe(40);
-    expect(result.currentPlanAge).toBe(40);
   });
 });
