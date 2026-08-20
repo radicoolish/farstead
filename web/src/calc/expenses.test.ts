@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildExpenseChartData,
-  describeExpense,
-  projectExpenseAnnualCosts,
-  projectHouseholdTotalExpensesByAge,
-} from "./expenses";
+import { buildExpenseChartData, projectExpenseAnnualCosts, projectHouseholdTotalExpensesByAge } from "./expenses";
 import type { Expense } from "./types";
 
 function makeExpense(overrides: Partial<Expense> = {}): Expense {
@@ -74,29 +69,6 @@ describe("projectHouseholdTotalExpensesByAge", () => {
     const b = makeExpense({ id: "b", monthlyAmount: 300 });
     const totals = projectHouseholdTotalExpensesByAge([a, b], 40, 40);
     expect(totals.get(40)).toBe((500 + 300) * 12);
-  });
-});
-
-describe("describeExpense", () => {
-  it("describes a loan with its remaining term", () => {
-    const loan = makeExpense({ isLoan: true, monthlyAmount: 2250, remainingTermYears: 11 });
-    expect(describeExpense(loan)).toBe("$2,250/mo — loan, 11 yrs remaining");
-  });
-
-  it("describes a perpetuity with inflation", () => {
-    const expense = makeExpense({ monthlyAmount: 500, applyInflation: true, inflationRate: 3 });
-    expect(describeExpense(expense)).toBe("$500/mo — ongoing — 3.0% inflation");
-  });
-
-  it("describes a start/stop expense with no inflation", () => {
-    const expense = makeExpense({
-      isPerpetuity: false,
-      startAge: 39,
-      stopAge: 49,
-      monthlyAmount: 300,
-      applyInflation: false,
-    });
-    expect(describeExpense(expense)).toBe("$300/mo — ages 39–49 — no inflation");
   });
 });
 

@@ -79,16 +79,3 @@ export function buildExpenseChartData(
   return rows;
 }
 
-/** One-line human summary, e.g. "$2,250/mo — loan, 11 yrs remaining" or
- * "$500/mo — ongoing — 3.0% inflation". Mirrors app.py's describe_expense. */
-export function describeExpense(expense: Expense): string {
-  const monthlyTxt = `$${expense.monthlyAmount.toLocaleString("en-US")}/mo`;
-  if (expense.isLoan) {
-    return `${monthlyTxt} — loan, ${expense.remainingTermYears ?? 0} yrs remaining`;
-  }
-  const timing = expense.isPerpetuity ? "ongoing" : `ages ${expense.startAge}–${expense.stopAge}`;
-  const inflationTxt = expense.applyInflation
-    ? `${expense.inflationRate.toFixed(1)}% inflation`
-    : "no inflation";
-  return `${monthlyTxt} — ${timing} — ${inflationTxt}`;
-}

@@ -1,8 +1,9 @@
 import { useState, type SyntheticEvent } from "react";
-import { describeExpense, EXPENSE_HORIZON_AGE } from "../calc";
+import { EXPENSE_HORIZON_AGE } from "../calc";
 import { useAppData } from "../state/AppDataContext";
 import { resolveWithdrawalRate } from "../state/withdrawalRate";
 import { ExpenseForm } from "./ExpenseForm";
+import { ExpenseCard } from "./ExpenseCard";
 import { ExpenseChart } from "./ExpenseChart";
 import { HouseholdCashFlowCharts } from "./HouseholdCashFlowCharts";
 import { NumberField } from "./NumberField";
@@ -51,16 +52,9 @@ export function ExpensesSection() {
       ) : (
         <>
           <h3>Expenses</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.5rem" }}>
             {expenses.map((expense) => (
-              <div key={expense.id} className="card-row">
-                <div>
-                  <strong>{expense.type}</strong> <span className="caption">— {describeExpense(expense)}</span>
-                </div>
-                <button type="button" onClick={() => removeExpense(expense.id)}>
-                  Remove
-                </button>
-              </div>
+              <ExpenseCard key={expense.id} expense={expense} onRemove={() => removeExpense(expense.id)} />
             ))}
           </div>
 
