@@ -15,6 +15,18 @@ const base = {
   strokeLinejoin: "round" as const,
 };
 
+/** Farstead's horizon-mark brand logo — a horizon line with a rising sun.
+ * Shared by the nav's brand lockup, the welcome-screen reopen button, and
+ * the welcome screen itself, so all three stay visually identical. */
+export function LogoMark({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 48 46" aria-hidden="true">
+      <line x1="5" y1="32" x2="43" y2="32" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="32" cy="15" r="7" fill="var(--accent-2)" />
+    </svg>
+  );
+}
+
 export function IconIncome({ className }: IconProps) {
   return (
     <svg className={className} {...base}>

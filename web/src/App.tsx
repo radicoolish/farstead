@@ -43,7 +43,12 @@ function App() {
     <ThemeProvider>
       <AppDataProvider>
         {showWelcome && <WelcomeScreen onDismiss={dismissWelcome} />}
-        <AppNav active={active} onSelect={handleSelect} onOpenDataManagement={() => setDataManagementOpen(true)} />
+        <AppNav
+          active={active}
+          onSelect={handleSelect}
+          onOpenDataManagement={() => setDataManagementOpen(true)}
+          onShowWelcome={() => setShowWelcome(true)}
+        />
         <main
           style={{
             maxWidth: 1080,

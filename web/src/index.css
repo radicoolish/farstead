@@ -349,6 +349,12 @@ button.danger:hover {
   flex: none;
 }
 
+.welcome-logo {
+  width: 56px;
+  height: 54px;
+  margin: 0 auto 1.25rem;
+}
+
 .app-tabs {
   display: flex;
   align-items: center;
@@ -410,7 +416,8 @@ button.danger:hover {
 }
 
 .app-data-button,
-.app-theme-button {
+.app-theme-button,
+.app-welcome-button {
   flex: none;
   display: flex;
   align-items: center;
@@ -423,13 +430,15 @@ button.danger:hover {
 }
 
 .app-data-button:hover,
-.app-theme-button:hover {
+.app-theme-button:hover,
+.app-welcome-button:hover {
   color: var(--ink);
   background: var(--surface-hover);
 }
 
 .app-data-button svg,
-.app-theme-button svg {
+.app-theme-button svg,
+.app-welcome-button svg {
   width: 18px;
   height: 18px;
 }
@@ -456,7 +465,8 @@ button.danger:hover {
   }
 
   .app-data-button,
-  .app-theme-button {
+  .app-theme-button,
+  .app-welcome-button {
     width: 44px;
     height: 44px;
   }

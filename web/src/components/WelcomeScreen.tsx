@@ -1,4 +1,5 @@
 import { SECTION_META, SECTION_ORDER } from "./AppNav";
+import { LogoMark } from "./icons";
 
 const FEATURE_COPY: Record<(typeof SECTION_ORDER)[number], string> = {
   income: "Enter each person's salary, 401(k) contributions, and tax rate.",
@@ -30,10 +31,7 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
       }}
     >
       <div style={{ width: "100%", maxWidth: 420, textAlign: "center" }}>
-        <svg viewBox="0 0 48 46" style={{ width: 56, height: 54, margin: "0 auto 1.25rem" }} aria-hidden="true">
-          <line x1="5" y1="32" x2="43" y2="32" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" />
-          <circle cx="32" cy="15" r="7" fill="var(--accent-2)" />
-        </svg>
+        <LogoMark className="welcome-logo" />
 
         <h1 style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0 0 0.5rem" }}>Welcome to Farstead</h1>
         <p style={{ fontSize: "0.95rem", color: "var(--ink-soft)", margin: "0 0 2rem", lineHeight: 1.5 }}>

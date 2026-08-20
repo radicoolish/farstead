@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import { useAppData } from "../state/AppDataContext";
 import { useTheme, type ThemeMode } from "../state/ThemeContext";
 import type { SectionKey } from "../sections";
-import { IconData, IconExpenses, IconFlag, IconGrowth, IconIncome, IconMoon, IconSimulator, IconSun, IconSystem } from "./icons";
+import { IconData, IconExpenses, IconFlag, IconGrowth, IconIncome, IconMoon, IconSimulator, IconSun, IconSystem, LogoMark } from "./icons";
 
 const THEME_ORDER: ThemeMode[] = ["light", "dark", "system"];
 const THEME_META: Record<ThemeMode, { label: string; Icon: ComponentType<{ className?: string }> }> = {
@@ -37,10 +37,12 @@ export function AppNav({
   active,
   onSelect,
   onOpenDataManagement,
+  onShowWelcome,
 }: {
   active: SectionKey;
   onSelect: (key: SectionKey) => void;
   onOpenDataManagement: () => void;
+  onShowWelcome: () => void;
 }) {
   const { people, expenses } = useAppData();
   const { mode, setMode } = useTheme();
@@ -57,10 +59,7 @@ export function AppNav({
     <header className="app-nav">
       <div className="app-nav-inner">
         <div className="app-brand">
-          <svg className="app-brand-mark" viewBox="0 0 48 46" aria-hidden="true">
-            <line x1="5" y1="32" x2="43" y2="32" stroke="var(--accent)" strokeWidth="5" strokeLinecap="round" />
-            <circle cx="32" cy="15" r="7" fill="var(--accent-2)" />
-          </svg>
+          <LogoMark className="app-brand-mark" />
           <span className="app-brand-text">Farstead</span>
         </div>
         <nav className="app-tabs" aria-label="Sections">
@@ -94,6 +93,9 @@ export function AppNav({
         </button>
         <button type="button" className="app-data-button" onClick={onOpenDataManagement} aria-label="Data management">
           <IconData />
+        </button>
+        <button type="button" className="app-welcome-button" onClick={onShowWelcome} aria-label="About Farstead" title="About Farstead">
+          <LogoMark />
         </button>
       </div>
     </header>
