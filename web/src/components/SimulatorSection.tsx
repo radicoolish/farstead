@@ -4,6 +4,7 @@ import { useAppData } from "../state/AppDataContext";
 import { PersonSimulatorPanel } from "./PersonSimulatorPanel";
 import { SimulatorCharts } from "./SimulatorCharts";
 import { initialSimState, overridesFromSimState, type PersonSimState } from "../simulator/state";
+import { NumberField } from "./NumberField";
 import { SECTION_META } from "./AppNav";
 
 const { Icon } = SECTION_META.simulator;
@@ -72,15 +73,7 @@ export function SimulatorSection() {
         </div>
         <div className="field" style={{ maxWidth: 220 }}>
           <label htmlFor="sim-withdrawal-rate">Simulated 401k Withdrawal Rate (%)</label>
-          <input
-            id="sim-withdrawal-rate"
-            type="number"
-            min={0}
-            max={20}
-            step="any"
-            value={simWithdrawalRatePct}
-            onChange={(e) => setSimWithdrawalRatePct(Number(e.target.value))}
-          />
+          <NumberField id="sim-withdrawal-rate" min={0} max={20} step="any" value={simWithdrawalRatePct} onChange={setSimWithdrawalRatePct} />
         </div>
         <button type="button" onClick={handleResetAll}>
           Reset All to Actual
@@ -96,7 +89,7 @@ export function SimulatorSection() {
         </details>
       ))}
 
-      <h3 style={{ marginTop: "1.5rem" }}>Actual vs. Simulated</h3>
+      <h3>Actual vs. Simulated</h3>
       <SimulatorCharts
         people={people}
         expenses={expenses}

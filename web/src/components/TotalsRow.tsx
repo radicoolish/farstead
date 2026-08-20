@@ -26,8 +26,13 @@ export function TotalsRow({ person }: { person: Person }) {
         return (
           <div key={entry.name} style={{ textAlign: "center", lineHeight: 1.3, padding: "2px 1px" }}>
             <div
-              className="caption"
-              style={{ fontSize: "0.68rem", opacity: 0.65, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              style={{
+                fontSize: "0.68rem",
+                color: "var(--ink-faint)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
               title={entry.name}
             >
               {entry.name}

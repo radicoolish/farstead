@@ -64,10 +64,47 @@ export function IconData({ className }: IconProps) {
   );
 }
 
+export function IconSummary({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="2.25" y="2.25" width="6.5" height="6.5" rx="1.25" />
+      <rect x="11.25" y="2.25" width="6.5" height="6.5" rx="1.25" />
+      <rect x="2.25" y="11.25" width="6.5" height="6.5" rx="1.25" />
+      <path d="M13.2 14.7l1.3 1.3 2.5-2.7" />
+    </svg>
+  );
+}
+
 export function IconClose({ className }: IconProps) {
   return (
     <svg className={className} {...base}>
       <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" />
+    </svg>
+  );
+}
+
+export function IconSun({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <circle cx="10" cy="10" r="3.4" />
+      <path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1L4.7 4.7" />
+    </svg>
+  );
+}
+
+export function IconMoon({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M16.5 12.3A6.75 6.75 0 0 1 7.7 3.5a6.75 6.75 0 1 0 8.8 8.8z" />
+    </svg>
+  );
+}
+
+export function IconSystem({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="2.5" y="4" width="15" height="10" rx="1.5" />
+      <path d="M7 17.5h6M10 14v3.5" />
     </svg>
   );
 }

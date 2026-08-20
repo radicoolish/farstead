@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { effectiveGrowthRateForYear, MARKET_CONDITIONS } from "./marketConditions";
 import {
   buildHouseholdComboData,
   personScenarioOptions,
   projectBalance,
+  projectHouseholdBalanceByAge,
   projectHouseholdNetIncomeByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdWithdrawalIncomeByAge,
@@ -133,6 +135,93 @@ describe("projectHouseholdWithdrawalIncomeByAge", () => {
     expect(totals.get(66)).toBeCloseTo(38834.45, 1);
     expect(totals.get(67)).toBeCloseTo(39517.94, 1);
     expect(totals.get(68)).toBeCloseTo(40213.46, 1);
+  });
+});
+
+describe("market conditions", () => {
+  it("effectiveGrowthRateForYear leaves the rate unaffected at or before startAge", () => {
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bear, 40, 40, 5)).toBeCloseTo(0.06, 5);
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bear, 35, 40, 5)).toBeCloseTo(0.06, 5);
+  });
+
+  it("effectiveGrowthRateForYear applies a flat adjustment for bear/bull for durationYears, then reverts", () => {
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bear, 41, 40, 5)).toBeCloseTo(0.0, 5); // year 1
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bear, 45, 40, 5)).toBeCloseTo(0.0, 5); // year 5, still within duration
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bear, 46, 40, 5)).toBeCloseTo(0.06, 5); // year 6, duration elapsed
+    expect(effectiveGrowthRateForYear(0.06, MARKET_CONDITIONS.bull, 41, 40, 5)).toBeCloseTo(0.1, 5);
+  });
+
+  it("effectiveGrowthRateForYear steps through a historical sequence from startAge, then reverts to the base rate", () => {
+    const dotcom = MARKET_CONDITIONS.dotcom;
+    expect(effectiveGrowthRateForYear(0.06, dotcom, 41, 40, 5)).toBeCloseTo(-0.09, 5); // year 1
+    expect(effectiveGrowthRateForYear(0.06, dotcom, 44, 40, 5)).toBeCloseTo(0.29, 5); // year 4, last of the sequence
+    expect(effectiveGrowthRateForYear(0.06, dotcom, 45, 40, 5)).toBeCloseTo(0.06, 5); // year 5, sequence exhausted
+  });
+
+  it("projectBalance applies a sustained bear-market adjustment starting now by default", () => {
+    const rows = projectBalance(makePerson(), { marketCondition: "bear" }, TODAY);
+    // Base case (no override) is 24600 at 6% growth; bear knocks the
+    // effective rate to 0%, so only the contribution is added.
+    expect(rows.find((r) => r.age === 41)?.balance).toBeCloseTo(24000, 1);
+  });
+
+  it("projectBalance applies a historical event sequence starting now, then reverts to the base rate afterward", () => {
+    const rows = projectBalance(makePerson(), { marketCondition: "dotcom" }, TODAY);
+    const at44 = rows.find((r) => r.age === 44)!; // end of the 4-year dot-com sequence
+    const at45 = rows.find((r) => r.age === 45)!; // first year back on the base 6% assumption
+    const contributionAt45 = 100000 * Math.pow(1.02, 4) * 0.14; // unaffected salary trajectory * (contrib+match)
+    expect(at45.balance).toBeCloseTo(at44.balance * 1.06 + contributionAt45, 0);
+  });
+
+  it("projectBalance delays a historical event until marketConditionStartAge instead of starting now", () => {
+    const delayed = projectBalance(makePerson(), { marketCondition: "dotcom", marketConditionStartAge: 44 }, TODAY);
+    const baseline = projectBalance(makePerson(), {}, TODAY);
+    // Unaffected through the delayed start age — identical to the baseline.
+    expect(delayed.find((r) => r.age === 44)?.balance).toBeCloseTo(baseline.find((r) => r.age === 44)!.balance, 1);
+    // First affected year is age 45 (the sequence's -9% year 1), not age 41.
+    const at44 = delayed.find((r) => r.age === 44)!;
+    const at45 = delayed.find((r) => r.age === 45)!;
+    const contributionAt45 = 100000 * Math.pow(1.02, 4) * 0.14;
+    expect(at45.balance).toBeCloseTo(at44.balance * 0.91 + contributionAt45, 0);
+  });
+
+  it("projectBalance reverts a sustained bear market to the base rate once marketConditionDurationYears elapses", () => {
+    const shortBear = projectBalance(makePerson(), { marketCondition: "bear", marketConditionDurationYears: 2 }, TODAY);
+    const at42 = shortBear.find((r) => r.age === 42)!; // last of the 2 affected years (0% growth)
+    const at43 = shortBear.find((r) => r.age === 43)!; // duration elapsed — back to 6%
+    const contributionAt43 = 100000 * 1.02 * 1.02 * 0.14; // unaffected salary trajectory * (contrib+match)
+    expect(at43.balance).toBeCloseTo(at42.balance * 1.06 + contributionAt43, 0);
+  });
+});
+
+describe("projectHouseholdBalanceByAge", () => {
+  it("matches projectBalance's own trajectory before retirement", () => {
+    const person = makePerson();
+    const totals = projectHouseholdBalanceByAge([person], 40, 68, 4, {}, TODAY);
+    // From the projectBalance suite: balance(41) = 24600 exactly.
+    expect(totals.get(41)).toBeCloseTo(24600, 1);
+    // From the projectBalance suite: balance(65, at retirement) = 970861.36.
+    expect(totals.get(65)).toBeCloseTo(970861.36, 1);
+  });
+
+  it("depletes by the withdrawal rate after retirement, cross-checked against projectHouseholdWithdrawalIncomeByAge", () => {
+    const person = makePerson();
+    const balances = projectHouseholdBalanceByAge([person], 40, 68, 4, {}, TODAY);
+    const withdrawals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, 4, {}, TODAY);
+    // The withdrawal taken at each age is exactly 4% of the balance this
+    // function reports for the *previous* age — the two functions share
+    // the same underlying depletion mechanics, just exposing different
+    // parts of it.
+    expect(balances.get(66)! * 0.04).toBeCloseTo(withdrawals.get(67)!, 1);
+    expect(balances.get(67)! * 0.04).toBeCloseTo(withdrawals.get(68)!, 1);
+  });
+
+  it("sums independently across multiple people", () => {
+    const alice = makePerson({ id: "alice" });
+    const bob = makePerson({ id: "bob" });
+    const solo = projectHouseholdBalanceByAge([alice], 40, 45, 4, {}, TODAY).get(42)!;
+    const pair = projectHouseholdBalanceByAge([alice, bob], 40, 45, 4, {}, TODAY).get(42)!;
+    expect(pair).toBeCloseTo(solo * 2, 2);
   });
 });
 

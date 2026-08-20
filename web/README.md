@@ -1,4 +1,4 @@
-# Investment Scenario Planner — React
+# Farstead — React
 
 React + TypeScript rewrite of the Streamlit app one level up (`../app.py`). See the scoping
 artifact for the full plan: https://claude.ai/code/artifact/0491843b-4f54-4a8b-9e5d-ad2985cb3b8c

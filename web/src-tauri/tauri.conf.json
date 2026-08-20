@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "investment-scenario-planner",
+  "productName": "farstead",
   "version": "0.1.0",
-  "identifier": "com.investmentscenarioplanner.app",
+  "identifier": "com.farstead.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Investment Scenario Planner",
+        "title": "Farstead",
         "width": 1200,
         "height": 840,
         "minWidth": 480,

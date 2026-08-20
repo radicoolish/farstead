@@ -1,4 +1,5 @@
 import { calculateAge } from "./age";
+import { DEFAULT_MARKET_CONDITION_DURATION_YEARS, effectiveGrowthRateForYear, MARKET_CONDITIONS } from "./marketConditions";
 import type { BalancePoint, ByAge, IncomeChange, Person, PersonOverrides } from "./types";
 
 function round2(value: number): number {
@@ -42,6 +43,9 @@ export function projectBalance(
   let matchPct = effective.matchPct / 100;
   let salaryGrowth = effective.salaryIncreasePct / 100;
   const growthRate = effective.growthRatePct / 100;
+  const marketCondition = overrides.marketCondition ? MARKET_CONDITIONS[overrides.marketCondition] : undefined;
+  const marketConditionStartAge = overrides.marketConditionStartAge ?? age;
+  const marketConditionDurationYears = overrides.marketConditionDurationYears ?? DEFAULT_MARKET_CONDITION_DURATION_YEARS;
 
   const thisYear = today.getFullYear();
   const rows: BalancePoint[] = [{ age, year: thisYear, balance: round2(balance) }];
@@ -56,7 +60,14 @@ export function projectBalance(
       incomeTriggered = true;
     }
     const annualContribution = currentAge <= stopContributionAge ? salary * (contribPct + matchPct) : 0;
-    balance = balance * (1 + growthRate) + annualContribution;
+    const yearGrowthRate = effectiveGrowthRateForYear(
+      growthRate,
+      marketCondition,
+      currentAge,
+      marketConditionStartAge,
+      marketConditionDurationYears,
+    );
+    balance = balance * (1 + yearGrowthRate) + annualContribution;
     salary = salary * (1 + salaryGrowth);
     rows.push({ age: currentAge, year: thisYear + i, balance: round2(balance) });
   }
@@ -140,12 +151,22 @@ export function projectHouseholdWithdrawalIncomeByAge(
     const balanceByPersonAge = new Map(scenarioBalances.map((p) => [p.age, p.balance]));
     let balance = balanceByPersonAge.get(retirementAge) ?? scenarioBalances[scenarioBalances.length - 1].balance;
     const growthRate = effective.growthRatePct / 100;
+    const marketCondition = overrides.marketCondition ? MARKET_CONDITIONS[overrides.marketCondition] : undefined;
+    const marketConditionStartAge = overrides.marketConditionStartAge ?? personAge;
+    const marketConditionDurationYears = overrides.marketConditionDurationYears ?? DEFAULT_MARKET_CONDITION_DURATION_YEARS;
 
     for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
       if (personAge + i <= retirementAge) continue;
       const withdrawal = balance * withdrawalRate;
       addTo(totals, age, withdrawal);
-      balance = (balance - withdrawal) * (1 + growthRate);
+      const yearGrowthRate = effectiveGrowthRateForYear(
+        growthRate,
+        marketCondition,
+        personAge + i,
+        marketConditionStartAge,
+        marketConditionDurationYears,
+      );
+      balance = (balance - withdrawal) * (1 + yearGrowthRate);
     }
   }
   return totals;
@@ -172,6 +193,58 @@ export function projectHouseholdSocialSecurityByAge(
     const monthly = effective.socialSecurityMonthly;
     for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
       if (personAge + i >= claimAge) addTo(totals, age, monthly * 12);
+    }
+  }
+  return totals;
+}
+
+/** Combined 401(k) balance by household reference age, summed across
+ * everyone — the running balance itself, not the withdrawal amount.
+ * Before a person's own retirement age this is exactly `projectBalance`'s
+ * trajectory (growth + contributions); after it, the balance depletes by
+ * `withdrawalRatePct`% a year with the remainder still compounding at
+ * their own growth rate — the same mechanics that back
+ * projectHouseholdWithdrawalIncomeByAge, just exposing the balance itself
+ * instead of only the amount withdrawn from it. */
+export function projectHouseholdBalanceByAge(
+  people: Person[],
+  currentAge: number,
+  horizonAge: number,
+  withdrawalRatePct: number,
+  overridesByPersonId: Record<string, PersonOverrides> = {},
+  today: Date = new Date(),
+): ByAge {
+  const totals = zeroedByAge(currentAge, horizonAge);
+  const withdrawalRate = withdrawalRatePct / 100;
+  for (const person of people) {
+    const overrides = overridesByPersonId[person.id] ?? {};
+    const effective = effectivePerson(person, overrides);
+    const personAge = calculateAge(effective.birthday, today);
+    const retirementAge = effective.retirementAge;
+    const growthRate = effective.growthRatePct / 100;
+    const marketCondition = overrides.marketCondition ? MARKET_CONDITIONS[overrides.marketCondition] : undefined;
+    const marketConditionStartAge = overrides.marketConditionStartAge ?? personAge;
+    const marketConditionDurationYears = overrides.marketConditionDurationYears ?? DEFAULT_MARKET_CONDITION_DURATION_YEARS;
+    const scenarioBalances = projectBalance(person, overrides, today);
+    const balanceByPersonAge = new Map(scenarioBalances.map((p) => [p.age, p.balance]));
+
+    let balance = effective.currentBalance;
+    for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
+      const thisPersonAge = personAge + i;
+      if (thisPersonAge <= retirementAge) {
+        balance = balanceByPersonAge.get(thisPersonAge) ?? balance;
+      } else {
+        const withdrawal = balance * withdrawalRate;
+        const yearGrowthRate = effectiveGrowthRateForYear(
+          growthRate,
+          marketCondition,
+          thisPersonAge,
+          marketConditionStartAge,
+          marketConditionDurationYears,
+        );
+        balance = (balance - withdrawal) * (1 + yearGrowthRate);
+      }
+      addTo(totals, age, balance);
     }
   }
   return totals;

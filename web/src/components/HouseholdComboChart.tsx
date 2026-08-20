@@ -1,10 +1,10 @@
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -18,8 +18,12 @@ function lastValue(series: Map<number, number>): number {
   return [...series.values()][series.size - 1];
 }
 
-/** Line chart (every combo's balance by year) + bar chart (final balance
- * per combo, highest first), both colored by final projected value —
+/** Area chart (every combo's balance by year, overlaid with a very low
+ * fill opacity since up to 100 combos can overlap here) + bar chart (final
+ * balance per combo, highest first) — the bar chart stays a bar chart
+ * rather than becoming an area, since its x-axis is categorical (one bar
+ * per combo, no inherent order) and an area fill only means something
+ * against a continuous axis. Both colored by final projected value —
  * darker green means a higher balance, not list order. Mirrors app.py's
  * render_household_combinations / render_household_combo_bars. */
 export function HouseholdComboChart({ combos, totalCombos }: { combos: HouseholdCombo[]; totalCombos: number }) {
@@ -46,23 +50,25 @@ export function HouseholdComboChart({ combos, totalCombos }: { combos: Household
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: "1rem" }}>
         <div style={{ height: 400 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={lineData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <AreaChart data={lineData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis dataKey="year" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 11 }} width={52} />
               <Tooltip formatter={(v) => formatFullCurrency(Number(v))} />
               {combos.map((combo) => (
-                <Line
+                <Area
                   key={combo.label}
                   type="monotone"
                   dataKey={combo.label}
                   stroke={colorByLabel.get(combo.label)}
                   strokeWidth={1.5}
+                  fill={colorByLabel.get(combo.label)}
+                  fillOpacity={0.05}
                   dot={false}
                   legendType="none"
                 />
               ))}
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
         <div style={{ height: 400 }}>

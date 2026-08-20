@@ -1,53 +1,85 @@
 :root {
-  /* Cool slate-blue neutrals + blue primary + green as the secondary
-     "growth/positive" accent — the app's whole identity stays in this
-     blue/green/gray family; red is reserved for danger/deficit only. */
-  --bg: #f2f5f9;
-  --surface: #ffffff;
-  --surface-hover: #eef2f7;
-  --surface-sunken: #eaeff5;
-  --border: #dbe3ec;
-  --ink: #16212e;
-  --ink-soft: #56677a;
-  --ink-faint: #8996a6;
-  --accent: #2f6fed;
-  --accent-hover: #2059d6;
-  --accent-soft: #e6eefd;
-  --accent-2: #16a34a;
-  --accent-2-soft: #e4f6ea;
-  --danger: #d1373f;
-  --danger-soft: #fbe9ea;
-  --success: #16a34a;
+  /* Farstead's identity: warm cream neutrals + forest green primary +
+     brass/gold as the secondary "growth/positive" accent (echoing the
+     brass peak-marker in the horizon logo mark) — red stays reserved for
+     danger/deficit only. Every text/border pair below is hand-verified
+     against WCAG 2.1 AA (4.5:1 for text, 3:1 for UI-component borders)
+     using the relative luminance formula — not just picked by eye. */
+  --bg: #f4f1e8;
+  --surface: #fffdf7;
+  --surface-hover: #efe9d9;
+  --surface-sunken: #e8e0cb;
+  --border: #7e8b76; /* ~3.53:1 vs surface — passes UI-component contrast */
+  --ink: #182619; /* ~13.98:1 vs bg */
+  --ink-soft: #46583f; /* ~6.82:1 vs bg */
+  --ink-faint: #5c6e54; /* ~4.88:1 vs bg */
+  --accent: #2f6b4c; /* ~5.59:1 vs bg, both as text and button fill */
+  --accent-hover: #245439;
+  --accent-soft: #e4efe7;
+  --on-accent: #ffffff; /* text color for content placed on --accent */
+  --accent-2: #8a6423; /* brass — ~4.73:1 vs bg */
+  --accent-2-soft: #f3e8d2;
+  --danger: #b3261e; /* ~5.79:1 vs bg */
+  --danger-soft: #fbe9e8;
+  --success: #8a6423;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Code", "SF Mono", Consolas, ui-monospace, monospace;
 
-  --shadow-sm: 0 1px 2px rgba(23, 33, 46, 0.06);
-  --shadow-md: 0 6px 20px rgba(23, 33, 46, 0.08);
+  --shadow-sm: 0 1px 2px rgba(24, 38, 25, 0.06);
+  --shadow-md: 0 6px 20px rgba(24, 38, 25, 0.08);
 }
 
+/* Dark palette applies when the OS prefers dark AND the user hasn't
+   explicitly picked light in the in-app toggle... */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e141c;
-    --surface: #161f2a;
-    --surface-hover: #1d2734;
-    --surface-sunken: #1a2330;
-    --border: #2b3947;
-    --ink: #e8eef5;
-    --ink-soft: #a7b4c3;
-    --ink-faint: #6d7c8d;
-    --accent: #5c92ff;
-    --accent-hover: #7ba4ff;
-    --accent-soft: #1b2c4a;
-    --accent-2: #34c78a;
-    --accent-2-soft: #123024;
-    --danger: #ef6b6b;
-    --danger-soft: #3a2124;
-    --success: #34c78a;
+  :root:not([data-theme="light"]) {
+    --bg: #10201a;
+    --surface: #17271e;
+    --surface-hover: #1f3327;
+    --surface-sunken: #1b2c21;
+    --border: #5c7a64; /* ~3.29:1 vs surface */
+    --ink: #edf3ea; /* ~13.83:1 vs surface */
+    --ink-soft: #b7c7b7; /* ~8.82:1 vs surface */
+    --ink-faint: #93a896; /* ~6.16:1 vs surface */
+    --accent: #6fbe8e; /* ~7.01:1 vs surface, as text */
+    --accent-hover: #8ed1a8;
+    --accent-soft: #1e3a2a;
+    --on-accent: #0a1710; /* white text fails on this light accent — use dark text instead */
+    --accent-2: #d9ae5f; /* brass — ~7.56:1 vs surface */
+    --accent-2-soft: #3a2e12;
+    --danger: #f0736c; /* ~5.48:1 vs surface */
+    --danger-soft: #3a2020;
+    --success: #d9ae5f;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.35);
   }
+}
+
+/* ...and again, unconditionally, when the user explicitly picks dark —
+   this beats the OS preference in either direction. */
+:root[data-theme="dark"] {
+  --bg: #10201a;
+  --surface: #17271e;
+  --surface-hover: #1f3327;
+  --surface-sunken: #1b2c21;
+  --border: #5c7a64;
+  --ink: #edf3ea;
+  --ink-soft: #b7c7b7;
+  --ink-faint: #93a896;
+  --accent: #6fbe8e;
+  --accent-hover: #8ed1a8;
+  --accent-soft: #1e3a2a;
+  --on-accent: #0a1710;
+  --accent-2: #d9ae5f;
+  --accent-2-soft: #3a2e12;
+  --danger: #f0736c;
+  --danger-soft: #3a2020;
+  --success: #d9ae5f;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -62,9 +94,29 @@ body {
   line-height: 1.5;
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
   font-weight: 650;
   line-height: 1.2;
+}
+
+/* A deliberate, compact heading rhythm — without this, h2/h3/h4 fall back
+   to the browser's UA-default margins (symmetric, generous, and not
+   actually tuned for this layout), which is where most of the app's
+   uneven vertical spacing came from. Asymmetric on purpose: headings
+   need more room from what came before than from what follows. */
+h2 {
+  font-size: 1.4rem;
+  margin: 0 0 0.3rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 1.5rem 0 0.6rem;
+}
+
+h4 {
+  font-size: 0.95rem;
+  margin: 1.1rem 0 0.5rem;
 }
 
 label {
@@ -138,7 +190,7 @@ button:active {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 button.primary:hover {
@@ -220,6 +272,24 @@ button.danger:hover {
   gap: 1rem;
 }
 
+/* ---------- Stat tiles ---------- */
+
+.stat-tile-label {
+  font-size: 0.8125rem; /* matches .caption exactly, on purpose */
+  color: var(--ink-soft);
+  margin-bottom: 0.15rem;
+}
+
+.stat-tile-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.stat-tile-value-dense {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
 /* ---------- Section headers ---------- */
 
 .section-title {
@@ -268,10 +338,8 @@ button.danger:hover {
 }
 
 .app-brand-mark {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  width: 22px;
+  height: 21px;
   flex: none;
 }
 
@@ -332,10 +400,11 @@ button.danger:hover {
 
 .app-tab.active .app-tab-count {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
-.app-data-button {
+.app-data-button,
+.app-theme-button {
   flex: none;
   display: flex;
   align-items: center;
@@ -347,12 +416,14 @@ button.danger:hover {
   color: var(--ink-soft);
 }
 
-.app-data-button:hover {
+.app-data-button:hover,
+.app-theme-button:hover {
   color: var(--ink);
   background: var(--surface-hover);
 }
 
-.app-data-button svg {
+.app-data-button svg,
+.app-theme-button svg {
   width: 18px;
   height: 18px;
 }
@@ -371,8 +442,17 @@ button.danger:hover {
     display: none;
   }
 
+  /* 44px minimum touch target (iOS HIG / Android accessibility guidance) —
+     icon-only tabs need more padding than the labeled desktop version to
+     stay tappable, not just visually adequate. */
   .app-tab {
-    padding: 0.55rem;
+    padding: 0.8rem;
+  }
+
+  .app-data-button,
+  .app-theme-button {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -507,4 +587,43 @@ button.danger:hover {
 
 .modal-body {
   padding: 1.3rem;
+}
+
+/* ---------- Step footer ---------- */
+
+.step-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Fixed chart grids ---------- */
+/* Unlike ChartGrid's auto-fit (which wraps to however many columns fit),
+   this keeps a fixed column count so a chart set always lands in the same
+   number of rows on desktop — used where "everything fits in 2 rows at a
+   glance" matters more than each chart getting maximum width. */
+
+.chart-grid-fixed {
+  display: grid;
+  gap: 1rem;
+}
+
+.chart-grid-fixed-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .chart-grid-fixed-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .chart-grid-fixed-3 {
+    grid-template-columns: 1fr;
+  }
 }

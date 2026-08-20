@@ -1,5 +1,6 @@
 import { useId } from "react";
-import { calculateAge, type Person } from "../calc";
+import { calculateAge, DEFAULT_MARKET_CONDITION_DURATION_YEARS, MARKET_CONDITIONS, type MarketConditionKey, type Person } from "../calc";
+import { NumberField } from "./NumberField";
 import { SliderField } from "./SliderField";
 import {
   fieldsFromPerson,
@@ -8,6 +9,8 @@ import {
   type PersonSimState,
   type SimFields,
 } from "../simulator/state";
+
+const MARKET_CONDITION_ORDER: MarketConditionKey[] = ["normal", "bear", "bull", "dotcom", "financialCrisis", "covid"];
 
 interface PersonSimulatorPanelProps {
   person: Person;
@@ -37,7 +40,15 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
   }
 
   function handleReset() {
-    onChange({ fields: fieldsFromPerson(person), incomeChangeEnabled: false, incomeChange: sim.incomeChange, loadedScenarioLabel: "Base" });
+    onChange({
+      fields: fieldsFromPerson(person),
+      incomeChangeEnabled: false,
+      incomeChange: sim.incomeChange,
+      marketCondition: "normal",
+      marketConditionStartAge: age,
+      marketConditionDurationYears: DEFAULT_MARKET_CONDITION_DURATION_YEARS,
+      loadedScenarioLabel: "Base",
+    });
   }
 
   const scenarioOptions = simulatorScenarioOptions(person);
@@ -66,57 +77,40 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
         <div>
           <div className="field">
             <label htmlFor={id("salary")}>Salary ($/yr)</label>
-            <input
-              id={id("salary")}
-              type="number"
-              min={0}
-              step="any"
-              value={sim.fields.currentSalary}
-              onChange={(e) => updateField("currentSalary", Number(e.target.value))}
-            />
+            <NumberField id={id("salary")} min={0} step="any" value={sim.fields.currentSalary} onChange={(v) => updateField("currentSalary", v)} />
           </div>
           <div className="field">
             <label htmlFor={id("balance")}>Current 401(k) Balance ($)</label>
-            <input
+            <NumberField
               id={id("balance")}
-              type="number"
               min={0}
               step="any"
               value={sim.fields.currentBalance}
-              onChange={(e) => updateField("currentBalance", Number(e.target.value))}
+              onChange={(v) => updateField("currentBalance", v)}
             />
           </div>
           <div className="field">
             <label htmlFor={id("hsa")}>Monthly HSA Contribution ($)</label>
-            <input
-              id={id("hsa")}
-              type="number"
-              min={0}
-              step="any"
-              value={sim.fields.hsaMonthly}
-              onChange={(e) => updateField("hsaMonthly", Number(e.target.value))}
-            />
+            <NumberField id={id("hsa")} min={0} step="any" value={sim.fields.hsaMonthly} onChange={(v) => updateField("hsaMonthly", v)} />
           </div>
           <div className="field">
             <label htmlFor={id("medical")}>Medical Insurance ($/mo)</label>
-            <input
+            <NumberField
               id={id("medical")}
-              type="number"
               min={0}
               step="any"
               value={sim.fields.medicalInsuranceMonthly}
-              onChange={(e) => updateField("medicalInsuranceMonthly", Number(e.target.value))}
+              onChange={(v) => updateField("medicalInsuranceMonthly", v)}
             />
           </div>
           <div className="field">
             <label htmlFor={id("ss-monthly")}>Social Security Monthly Benefit ($)</label>
-            <input
+            <NumberField
               id={id("ss-monthly")}
-              type="number"
               min={0}
               step="any"
               value={sim.fields.socialSecurityMonthly}
-              onChange={(e) => updateField("socialSecurityMonthly", Number(e.target.value))}
+              onChange={(v) => updateField("socialSecurityMonthly", v)}
             />
           </div>
         </div>
@@ -210,34 +204,81 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
             <div className="field-row" style={{ marginTop: "0.5rem" }}>
               <div className="field">
                 <label htmlFor={id("ic-age")}>Age of Change</label>
-                <input
+                <NumberField
                   id={id("ic-age")}
-                  type="number"
                   min={age}
                   max={100}
                   value={sim.incomeChange.age}
-                  onChange={(e) =>
-                    onChange({ ...sim, incomeChange: { ...sim.incomeChange, age: Number(e.target.value) }, loadedScenarioLabel: "Custom" })
-                  }
+                  onChange={(v) => onChange({ ...sim, incomeChange: { ...sim.incomeChange, age: v }, loadedScenarioLabel: "Custom" })}
                 />
               </div>
               <div className="field">
                 <label htmlFor={id("ic-salary")}>New Salary ($/yr)</label>
-                <input
+                <NumberField
                   id={id("ic-salary")}
-                  type="number"
                   min={0}
                   step="any"
                   value={sim.incomeChange.newSalary}
-                  onChange={(e) =>
-                    onChange({
-                      ...sim,
-                      incomeChange: { ...sim.incomeChange, newSalary: Number(e.target.value) },
-                      loadedScenarioLabel: "Custom",
-                    })
-                  }
+                  onChange={(v) => onChange({ ...sim, incomeChange: { ...sim.incomeChange, newSalary: v }, loadedScenarioLabel: "Custom" })}
                 />
               </div>
+            </div>
+          )}
+        </div>
+      </details>
+
+      <details className="panel" style={{ marginTop: "0.75rem" }}>
+        <summary>Simulate Market Conditions</summary>
+        <div className="panel-body">
+          <div className="field" style={{ maxWidth: 320 }}>
+            <label htmlFor={id("market-condition")}>Market Condition</label>
+            <select
+              id={id("market-condition")}
+              value={sim.marketCondition}
+              onChange={(e) => onChange({ ...sim, marketCondition: e.target.value as MarketConditionKey, loadedScenarioLabel: "Custom" })}
+            >
+              <optgroup label="Sustained">
+                <option value="normal">{MARKET_CONDITIONS.normal.label}</option>
+                <option value="bear">{MARKET_CONDITIONS.bear.label}</option>
+                <option value="bull">{MARKET_CONDITIONS.bull.label}</option>
+              </optgroup>
+              <optgroup label="One-Time Historical Events">
+                {MARKET_CONDITION_ORDER.filter((key) => MARKET_CONDITIONS[key].yearSequencePct).map((key) => (
+                  <option key={key} value={key}>
+                    {MARKET_CONDITIONS[key].label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <p className="caption">{MARKET_CONDITIONS[sim.marketCondition].detail}</p>
+          </div>
+
+          {sim.marketCondition !== "normal" && (
+            <div className="field-row" style={{ maxWidth: 460 }}>
+              <div className="field">
+                <label htmlFor={id("market-condition-start")}>Starts at Age</label>
+                <NumberField
+                  id={id("market-condition-start")}
+                  min={age}
+                  max={100}
+                  value={sim.marketConditionStartAge}
+                  onChange={(v) => onChange({ ...sim, marketConditionStartAge: v, loadedScenarioLabel: "Custom" })}
+                />
+                <p className="caption">Defaults to now ({age}) — push it out to simulate the event happening later.</p>
+              </div>
+              {!MARKET_CONDITIONS[sim.marketCondition].yearSequencePct && (
+                <div className="field">
+                  <label htmlFor={id("market-condition-duration")}>Duration (years)</label>
+                  <NumberField
+                    id={id("market-condition-duration")}
+                    min={1}
+                    max={40}
+                    value={sim.marketConditionDurationYears}
+                    onChange={(v) => onChange({ ...sim, marketConditionDurationYears: v, loadedScenarioLabel: "Custom" })}
+                  />
+                  <p className="caption">How long the sustained condition lasts before reverting to your own growth rate.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
   type Person,
 } from "../calc";
 import type { ScenarioDraft } from "../hooks/usePeople";
+import { NumberField } from "./NumberField";
 
 interface ScenarioBuilderProps {
   person: Person;
@@ -104,63 +105,25 @@ export function ScenarioBuilder({ person, onAdd }: ScenarioBuilderProps) {
           <div className="field-row">
             <div className="field">
               <label htmlFor={`${uid}-change-age`}>Age When Income Changes</label>
-              <input
-                id={`${uid}-change-age`}
-                type="number"
-                min={ageMin}
-                max={ageMax}
-                value={changeAge}
-                onChange={(e) => setChangeAge(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-change-age`} min={ageMin} max={ageMax} value={changeAge} onChange={setChangeAge} />
             </div>
             <div className="field">
               <label htmlFor={`${uid}-new-salary`}>New Annual Salary ($)</label>
-              <input
-                id={`${uid}-new-salary`}
-                type="number"
-                min={0}
-                step="any"
-                value={newSalary}
-                onChange={(e) => setNewSalary(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-new-salary`} min={0} step="any" value={newSalary} onChange={setNewSalary} />
             </div>
           </div>
           <div className="field-row" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
             <div className="field">
               <label htmlFor={`${uid}-new-contrib`}>New % of Salary Contributed</label>
-              <input
-                id={`${uid}-new-contrib`}
-                type="number"
-                min={0}
-                max={100}
-                step="any"
-                value={newContribution}
-                onChange={(e) => setNewContribution(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-new-contrib`} min={0} max={100} step="any" value={newContribution} onChange={setNewContribution} />
             </div>
             <div className="field">
               <label htmlFor={`${uid}-new-match`}>New % of Salary Matched</label>
-              <input
-                id={`${uid}-new-match`}
-                type="number"
-                min={0}
-                max={100}
-                step="any"
-                value={newMatch}
-                onChange={(e) => setNewMatch(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-new-match`} min={0} max={100} step="any" value={newMatch} onChange={setNewMatch} />
             </div>
             <div className="field">
               <label htmlFor={`${uid}-new-raise`}>New Annual Salary Increase (%)</label>
-              <input
-                id={`${uid}-new-raise`}
-                type="number"
-                min={0}
-                max={50}
-                step="any"
-                value={newRaise}
-                onChange={(e) => setNewRaise(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-new-raise`} min={0} max={50} step="any" value={newRaise} onChange={setNewRaise} />
             </div>
           </div>
           <p className="caption">
@@ -174,14 +137,13 @@ export function ScenarioBuilder({ person, onAdd }: ScenarioBuilderProps) {
             {config.label}
             {config.percent ? " (%)" : ""}
           </label>
-          <input
+          <NumberField
             id={`${uid}-value`}
-            type="number"
             min={config.isAge ? Math.max(config.min, ageMin) : config.min}
             max={config.max}
             step={config.percent ? "any" : 1}
             value={simpleValue}
-            onChange={(e) => setSimpleValue(Number(e.target.value))}
+            onChange={setSimpleValue}
           />
         </div>
       ) : null}

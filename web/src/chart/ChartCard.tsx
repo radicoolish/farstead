@@ -16,15 +16,21 @@ export function ChartCard({
 }) {
   return (
     <div className="card" style={{ minWidth: 0 }}>
-      <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.95rem" }}>{title}</h4>
+      <h4 style={{ margin: "0 0 0.75rem" }}>{title}</h4>
       <div style={{ width: "100%", height }}>{children}</div>
     </div>
   );
 }
 
-/** Responsive grid for chart panels — 2 columns on wide screens, 1 on
- * narrow, matching the app's 2x2 (or 2x2+1) chart layouts. */
-export function ChartGrid({ children }: { children: ReactNode }) {
+/** Responsive grid for chart panels. By default, auto-fits as many
+ * columns as fit (>=320px each), wrapping freely. Pass `fixedColumns` to
+ * pin the column count instead (with its own narrower-screen fallbacks in
+ * index.css's .chart-grid-fixed-N) — used where landing in a predictable
+ * number of rows matters more than each chart getting maximum width. */
+export function ChartGrid({ children, fixedColumns }: { children: ReactNode; fixedColumns?: number }) {
+  if (fixedColumns) {
+    return <div className={`chart-grid-fixed chart-grid-fixed-${fixedColumns}`}>{children}</div>;
+  }
   return (
     <div
       style={{

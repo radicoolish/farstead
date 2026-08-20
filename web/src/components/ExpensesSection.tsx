@@ -4,6 +4,7 @@ import { useAppData } from "../state/AppDataContext";
 import { ExpenseForm } from "./ExpenseForm";
 import { ExpenseChart } from "./ExpenseChart";
 import { HouseholdCashFlowCharts } from "./HouseholdCashFlowCharts";
+import { NumberField } from "./NumberField";
 import { SECTION_META } from "./AppNav";
 
 const { Icon } = SECTION_META.expenses;
@@ -34,14 +35,7 @@ export function ExpensesSection() {
 
       <div className="field" style={{ maxWidth: 260 }}>
         <label htmlFor="expenses-current-age">Current Age (for this projection)</label>
-        <input
-          id="expenses-current-age"
-          type="number"
-          min={1}
-          max={EXPENSE_HORIZON_AGE - 1}
-          value={currentAge}
-          onChange={(e) => setCurrentAge(Number(e.target.value))}
-        />
+        <NumberField id="expenses-current-age" min={1} max={EXPENSE_HORIZON_AGE - 1} value={currentAge} onChange={setCurrentAge} />
       </div>
 
       <details className="panel" open={formOpen} onToggle={handleToggle}>
@@ -85,15 +79,7 @@ export function ExpensesSection() {
           </p>
           <div className="field" style={{ maxWidth: 260, marginBottom: "1rem" }}>
             <label htmlFor="withdrawal-rate">401k Withdrawal Rate (%)</label>
-            <input
-              id="withdrawal-rate"
-              type="number"
-              min={0}
-              max={20}
-              step="any"
-              value={withdrawalRatePct}
-              onChange={(e) => setWithdrawalRatePct(Number(e.target.value))}
-            />
+            <NumberField id="withdrawal-rate" min={0} max={20} step="any" value={withdrawalRatePct} onChange={setWithdrawalRatePct} />
           </div>
           <HouseholdCashFlowCharts
             people={people}

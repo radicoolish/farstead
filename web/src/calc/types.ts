@@ -3,6 +3,8 @@
 // byte-compatible with that JSON — an import/export bridge is a separate
 // concern for later, if the two apps ever need to exchange files directly.
 
+import type { MarketConditionKey } from "./marketConditions";
+
 export type AccountType = "Pre-tax" | "Roth";
 
 /** A step change to a new, flat salary at a given age, held through
@@ -37,6 +39,14 @@ export interface PersonOverrides {
   socialSecurityClaimAge?: number;
   socialSecurityMonthly?: number;
   incomeChange?: IncomeChange;
+  /** Simulator-only — not settable via the saved-scenario builder. See
+   * marketConditions.ts. `marketConditionStartAge` defaults to the
+   * person's current age (i.e. "starts now") if omitted;
+   * `marketConditionDurationYears` only matters for a sustained bear/bull
+   * condition — historical events use their own fixed shape regardless. */
+  marketCondition?: MarketConditionKey;
+  marketConditionStartAge?: number;
+  marketConditionDurationYears?: number;
 }
 
 /** A named, saved single-field (or income-change) override — up to 4 per

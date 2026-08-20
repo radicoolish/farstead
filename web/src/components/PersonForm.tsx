@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import type { AccountType, Person } from "../calc";
 import type { PersonDraft } from "../hooks/usePeople";
+import { NumberField } from "./NumberField";
 import { TaxRateEstimator } from "./TaxRateEstimator";
 import { SocialSecurityEstimator } from "./SocialSecurityEstimator";
 
@@ -123,70 +124,36 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
         <div>
           <div className="field">
             <label htmlFor={id("salary")}>Salary ($/yr)</label>
-            <input
-              id={id("salary")}
-              type="number"
-              min={0}
-              step="any"
-              value={currentSalary}
-              onChange={(e) => setCurrentSalary(Number(e.target.value))}
-            />
+            <NumberField id={id("salary")} min={0} step="any" value={currentSalary} onChange={setCurrentSalary} />
           </div>
           <div className="field">
             <label htmlFor={id("contribution")}>401k Contribution (%)</label>
-            <input
-              id={id("contribution")}
-              type="number"
-              min={0}
-              max={100}
-              step="any"
-              value={contributionPct}
-              onChange={(e) => setContributionPct(Number(e.target.value))}
-            />
+            <NumberField id={id("contribution")} min={0} max={100} step="any" value={contributionPct} onChange={setContributionPct} />
           </div>
           <div className="field">
             <label htmlFor={id("hsa")}>Monthly HSA Contribution ($)</label>
-            <input
-              id={id("hsa")}
-              type="number"
-              min={0}
-              step="any"
-              value={hsaMonthly}
-              onChange={(e) => setHsaMonthly(Number(e.target.value))}
-            />
+            <NumberField id={id("hsa")} min={0} step="any" value={hsaMonthly} onChange={setHsaMonthly} />
           </div>
           <div className="field">
             <label htmlFor={id("medical")}>Medical Insurance ($/mo)</label>
-            <input
-              id={id("medical")}
-              type="number"
-              min={0}
-              step="any"
-              value={medicalInsuranceMonthly}
-              onChange={(e) => setMedicalInsuranceMonthly(Number(e.target.value))}
-            />
+            <NumberField id={id("medical")} min={0} step="any" value={medicalInsuranceMonthly} onChange={setMedicalInsuranceMonthly} />
           </div>
         </div>
         <div>
           <div className="field">
-            <TaxRateEstimator
-              annualSalary={currentSalary}
-              contributionPct={contributionPct}
-              hsaMonthly={hsaMonthly}
-              onEstimate={setTaxRatePct}
-            />
-          </div>
-          <div className="field">
             <label htmlFor={id("tax-rate")}>Effective Tax Rate (%)</label>
-            <input
-              id={id("tax-rate")}
-              type="number"
-              min={0}
-              max={60}
-              step="any"
-              value={taxRatePct}
-              onChange={(e) => setTaxRatePct(Number(e.target.value))}
-            />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <NumberField
+                id={id("tax-rate")}
+                min={0}
+                max={60}
+                step="any"
+                value={taxRatePct}
+                onChange={setTaxRatePct}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <TaxRateEstimator annualSalary={currentSalary} contributionPct={contributionPct} hsaMonthly={hsaMonthly} onEstimate={setTaxRatePct} />
+            </div>
           </div>
           {currentSalary > 0 && (
             <p className="caption">
@@ -201,56 +168,25 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
         <div>
           <div className="field">
             <label htmlFor={id("balance")}>Current 401(k) Balance ($)</label>
-            <input
-              id={id("balance")}
-              type="number"
-              min={0}
-              step="any"
-              value={currentBalance}
-              onChange={(e) => setCurrentBalance(Number(e.target.value))}
-            />
+            <NumberField id={id("balance")} min={0} step="any" value={currentBalance} onChange={setCurrentBalance} />
           </div>
           <div className="field">
             <label htmlFor={id("match")}>% of Salary Matched</label>
-            <input
-              id={id("match")}
-              type="number"
-              min={0}
-              max={100}
-              step="any"
-              value={matchPct}
-              onChange={(e) => setMatchPct(Number(e.target.value))}
-            />
+            <NumberField id={id("match")} min={0} max={100} step="any" value={matchPct} onChange={setMatchPct} />
           </div>
           <div className="field">
             <label htmlFor={id("raise")}>Annual Salary Increase (%)</label>
-            <input
-              id={id("raise")}
-              type="number"
-              min={0}
-              max={50}
-              step="any"
-              value={salaryIncreasePct}
-              onChange={(e) => setSalaryIncreasePct(Number(e.target.value))}
-            />
+            <NumberField id={id("raise")} min={0} max={50} step="any" value={salaryIncreasePct} onChange={setSalaryIncreasePct} />
           </div>
           <div className="field">
             <label htmlFor={id("growth")}>Annual Growth Rate (%)</label>
-            <input
-              id={id("growth")}
-              type="number"
-              min={0}
-              max={50}
-              step="any"
-              value={growthRatePct}
-              onChange={(e) => setGrowthRatePct(Number(e.target.value))}
-            />
+            <NumberField id={id("growth")} min={0} max={50} step="any" value={growthRatePct} onChange={setGrowthRatePct} />
           </div>
         </div>
         <div>
           <fieldset className="field">
             <label>Account Type</label>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 400 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 400, whiteSpace: "nowrap" }}>
               <input
                 type="radio"
                 name={id("account-type")}
@@ -259,7 +195,7 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
               />
               Pre-tax
             </label>{" "}
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 400 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 400, whiteSpace: "nowrap" }}>
               <input
                 type="radio"
                 name={id("account-type")}
@@ -271,25 +207,11 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
           </fieldset>
           <div className="field">
             <label htmlFor={id("retirement-age")}>Retirement / Draw Age</label>
-            <input
-              id={id("retirement-age")}
-              type="number"
-              min={1}
-              max={100}
-              value={retirementAge}
-              onChange={(e) => setRetirementAge(Number(e.target.value))}
-            />
+            <NumberField id={id("retirement-age")} min={1} max={100} value={retirementAge} onChange={setRetirementAge} />
           </div>
           <div className="field">
             <label htmlFor={id("stop-contribution-age")}>Stop Contribution Age</label>
-            <input
-              id={id("stop-contribution-age")}
-              type="number"
-              min={1}
-              max={100}
-              value={stopContributionAge}
-              onChange={(e) => setStopContributionAge(Number(e.target.value))}
-            />
+            <NumberField id={id("stop-contribution-age")} min={1} max={100} value={stopContributionAge} onChange={setStopContributionAge} />
             <p className="caption">Age at which contributions and the employer match stop.</p>
           </div>
         </div>
@@ -299,34 +221,27 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
       <div className="field-row">
         <div className="field">
           <label htmlFor={id("ss-claim-age")}>Claim Age</label>
-          <input
-            id={id("ss-claim-age")}
-            type="number"
-            min={62}
-            max={70}
-            value={socialSecurityClaimAge}
-            onChange={(e) => setSocialSecurityClaimAge(Number(e.target.value))}
-          />
+          <NumberField id={id("ss-claim-age")} min={62} max={70} value={socialSecurityClaimAge} onChange={setSocialSecurityClaimAge} />
           <p className="caption">Earliest claim age is 62; delayed retirement credits stop accruing at 70.</p>
         </div>
         <div className="field">
-          <SocialSecurityEstimator
-            annualSalary={currentSalary}
-            birthday={birthday}
-            claimAge={socialSecurityClaimAge}
-            onEstimate={setSocialSecurityMonthly}
-          />
-          <label htmlFor={id("ss-monthly")} style={{ marginTop: "0.5rem" }}>
-            Estimated Monthly Benefit ($)
-          </label>
-          <input
-            id={id("ss-monthly")}
-            type="number"
-            min={0}
-            step="any"
-            value={socialSecurityMonthly}
-            onChange={(e) => setSocialSecurityMonthly(Number(e.target.value))}
-          />
+          <label htmlFor={id("ss-monthly")}>Estimated Monthly Benefit ($)</label>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <NumberField
+              id={id("ss-monthly")}
+              min={0}
+              step="any"
+              value={socialSecurityMonthly}
+              onChange={setSocialSecurityMonthly}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <SocialSecurityEstimator
+              annualSalary={currentSalary}
+              birthday={birthday}
+              claimAge={socialSecurityClaimAge}
+              onEstimate={setSocialSecurityMonthly}
+            />
+          </div>
         </div>
       </div>
 

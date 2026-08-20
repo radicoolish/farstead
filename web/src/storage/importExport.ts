@@ -5,7 +5,7 @@ import type { Expense, Person } from "../calc";
 // see calc/types.ts for why the two aren't kept byte-compatible.
 
 export interface ExportPayload {
-  app: "investment-scenario-planner-web";
+  app: "farstead-web";
   version: 1;
   exportedAt: string;
   people: Person[];
@@ -30,7 +30,7 @@ export function buildExportPayload(
   withdrawalRatePct: number,
 ): ExportPayload {
   return {
-    app: "investment-scenario-planner-web",
+    app: "farstead-web",
     version: 1,
     exportedAt: new Date().toISOString().slice(0, 10),
     people,

@@ -2,6 +2,7 @@ import { buildHouseholdComboData, formatCompactCurrency, projectBalance } from "
 import { useAppData } from "../state/AppDataContext";
 import { PersonBalanceCard } from "./PersonBalanceCard";
 import { HouseholdComboChart } from "./HouseholdComboChart";
+import { StatTile } from "./StatTile";
 import { MAX_HOUSEHOLD_COMBOS } from "../calc";
 import { SECTION_META } from "./AppNav";
 
@@ -50,26 +51,15 @@ export function FourZeroOneKSection() {
         ))}
       </div>
 
-      <h3 style={{ marginTop: "1.5rem" }}>Household Summary</h3>
+      <h3>Household Summary</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-        <div className="card">
-          <div className="caption">Combined Current Balance</div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 700 }} title={`$${totalCurrent.toLocaleString("en-US")}`}>
-            {formatCompactCurrency(totalCurrent)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="caption">Combined Projected Balance at Retirement</div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 700 }} title={`$${totalProjected.toLocaleString("en-US")}`}>
-            {formatCompactCurrency(totalProjected)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="caption">Maximum Scenario</div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 700 }}>
-            {maxBalance !== null ? formatCompactCurrency(maxBalance) : "—"}
-          </div>
-        </div>
+        <StatTile label="Combined Current Balance" value={formatCompactCurrency(totalCurrent)} help={`$${totalCurrent.toLocaleString("en-US")}`} />
+        <StatTile
+          label="Combined Projected Balance at Retirement"
+          value={formatCompactCurrency(totalProjected)}
+          help={`$${totalProjected.toLocaleString("en-US")}`}
+        />
+        <StatTile label="Maximum Scenario" value={maxBalance !== null ? formatCompactCurrency(maxBalance) : "—"} />
       </div>
 
       {combos.length === 0 ? (

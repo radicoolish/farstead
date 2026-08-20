@@ -29,19 +29,10 @@ export function IncomeSection() {
       </h2>
       <p className="caption">Per-person income, paycheck deductions, and effective tax rate</p>
 
-      <details className="panel" open={formOpen} onToggle={handleToggle}>
-        <summary>Tell Me About Yourself</summary>
-        <div className="panel-body">
-          <PersonForm onSubmit={addPerson} />
-        </div>
-      </details>
-
-      {people.length === 0 ? (
-        <p className="caption">No people added yet. Use the form above to add someone.</p>
-      ) : (
+      {people.length > 0 && (
         <>
           <h3>People</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.5rem" }}>
             {people.map((person) => (
               <PersonCard
                 key={person.id}
@@ -53,6 +44,15 @@ export function IncomeSection() {
           </div>
         </>
       )}
+
+      <details className="panel" open={formOpen} onToggle={handleToggle}>
+        <summary>Tell Me About Yourself</summary>
+        <div className="panel-body">
+          <PersonForm onSubmit={addPerson} />
+        </div>
+      </details>
+
+      {people.length === 0 && <p className="caption">No people added yet. Use the form above to add someone.</p>}
     </section>
   );
 }

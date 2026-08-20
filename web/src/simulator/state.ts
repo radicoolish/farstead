@@ -1,4 +1,12 @@
-import { calculateAge, personScenarioOptions, type IncomeChange, type Person, type PersonOverrides } from "../calc";
+import {
+  calculateAge,
+  DEFAULT_MARKET_CONDITION_DURATION_YEARS,
+  personScenarioOptions,
+  type IncomeChange,
+  type MarketConditionKey,
+  type Person,
+  type PersonOverrides,
+} from "../calc";
 
 /** Every field the Simulator lets a user freely override for one person,
  * sandboxed in memory only — never written to localStorage. Always holds
@@ -24,6 +32,17 @@ export interface PersonSimState {
   fields: SimFields;
   incomeChangeEnabled: boolean;
   incomeChange: IncomeChange;
+  /** Sustained bear/bull adjustment or one-time historical event sequence
+   * applied to this person's growth rate. "normal" means no override —
+   * see marketConditions.ts. Simulator-only, never saved as a scenario. */
+  marketCondition: MarketConditionKey;
+  /** Age the condition starts at — defaults to "now" (the person's
+   * current age) but can be pushed into the future. */
+  marketConditionStartAge: number;
+  /** How many years a sustained bear/bull condition lasts before
+   * reverting to the person's own growth-rate assumption. Ignored for
+   * historical events, which always use their own fixed shape. */
+  marketConditionDurationYears: number;
   /** Label of the saved scenario last loaded into this panel ("Base" if
    * none, or if the user has since hand-edited a field away from it). */
   loadedScenarioLabel: string;
@@ -62,6 +81,9 @@ export function initialSimState(person: Person): PersonSimState {
     fields: fieldsFromPerson(person),
     incomeChangeEnabled: false,
     incomeChange: defaultIncomeChange(person),
+    marketCondition: "normal",
+    marketConditionStartAge: calculateAge(person.birthday),
+    marketConditionDurationYears: DEFAULT_MARKET_CONDITION_DURATION_YEARS,
     loadedScenarioLabel: "Base",
   };
 }
@@ -71,15 +93,27 @@ export function initialSimState(person: Person): PersonSimState {
  * per-scenario override pairs used elsewhere for the saved-scenario chart. */
 export function simStateFromScenario(person: Person, label: string, overrides: PersonOverrides): PersonSimState {
   const fields = { ...fieldsFromPerson(person), ...overrides };
+  const marketConditionDefaults = {
+    marketCondition: "normal" as const,
+    marketConditionStartAge: calculateAge(person.birthday),
+    marketConditionDurationYears: DEFAULT_MARKET_CONDITION_DURATION_YEARS,
+  };
   if (overrides.incomeChange) {
     return {
       fields,
       incomeChangeEnabled: true,
       incomeChange: { ...defaultIncomeChange(person), ...overrides.incomeChange },
+      ...marketConditionDefaults,
       loadedScenarioLabel: label,
     };
   }
-  return { fields, incomeChangeEnabled: false, incomeChange: defaultIncomeChange(person), loadedScenarioLabel: label };
+  return {
+    fields,
+    incomeChangeEnabled: false,
+    incomeChange: defaultIncomeChange(person),
+    ...marketConditionDefaults,
+    loadedScenarioLabel: label,
+  };
 }
 
 /** Saved-scenario picker options for a person's simulator panel — reuses
@@ -92,5 +126,12 @@ export function overridesFromSimState(sim: PersonSimState): PersonOverrides {
   return {
     ...sim.fields,
     ...(sim.incomeChangeEnabled ? { incomeChange: sim.incomeChange } : {}),
+    ...(sim.marketCondition !== "normal"
+      ? {
+          marketCondition: sim.marketCondition,
+          marketConditionStartAge: sim.marketConditionStartAge,
+          marketConditionDurationYears: sim.marketConditionDurationYears,
+        }
+      : {}),
   };
 }

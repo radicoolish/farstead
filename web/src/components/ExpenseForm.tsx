@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { EXPENSE_HORIZON_AGE, EXPENSE_TYPES, LOAN_EXPENSE_TYPES, type ExpenseType } from "../calc";
 import type { ExpenseDraft } from "../hooks/useExpenses";
 import { useAppData } from "../state/AppDataContext";
+import { NumberField } from "./NumberField";
 
 interface ExpenseFormProps {
   currentAge: number;
@@ -98,14 +99,7 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
         </div>
         <div className="field">
           <label htmlFor={`${uid}-amount`}>{isLoanType ? "Current Monthly Payment ($)" : "Monthly Value ($)"}</label>
-          <input
-            id={`${uid}-amount`}
-            type="number"
-            min={0}
-            step="any"
-            value={monthlyAmount}
-            onChange={(e) => setMonthlyAmount(Number(e.target.value))}
-          />
+          <NumberField id={`${uid}-amount`} min={0} step="any" value={monthlyAmount} onChange={setMonthlyAmount} />
         </div>
       </div>
 
@@ -113,14 +107,7 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
         <>
           <div className="field">
             <label htmlFor={`${uid}-term`}>Remaining Term (Years)</label>
-            <input
-              id={`${uid}-term`}
-              type="number"
-              min={0}
-              max={50}
-              value={remainingTermYears}
-              onChange={(e) => setRemainingTermYears(Number(e.target.value))}
-            />
+            <NumberField id={`${uid}-term`} min={0} max={50} value={remainingTermYears} onChange={setRemainingTermYears} />
           </div>
           <p className="caption">Loan payments are fixed (no inflation) and fall off automatically once the term ends.</p>
         </>
@@ -129,7 +116,16 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
           {retirementAgeRef !== null && retirementAgeRef >= 65 && (
             <p
               className="caption"
-              style={{ color: "var(--danger)", background: "var(--danger-soft)", padding: "0.5rem 0.75rem", borderRadius: 6 }}
+              style={{
+                color: "var(--danger)",
+                background: "var(--danger-soft)",
+                padding: "0.5rem 0.75rem",
+                borderRadius: 6,
+                textAlign: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               Retirement age is {retirementAgeRef}, so Medicare coverage begins immediately at retirement —
               there's no coverage gap to insure. This defaults to a zero-length window (won't count toward
@@ -146,26 +142,12 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
             <div className="field-row">
               <div className="field">
                 <label htmlFor={`${uid}-start`}>Start Age</label>
-                <input
-                  id={`${uid}-start`}
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={startAge}
-                  onChange={(e) => setStartAge(Number(e.target.value))}
-                />
+                <NumberField id={`${uid}-start`} min={1} max={100} value={startAge} onChange={setStartAge} />
                 {startHelp && <p className="caption">{startHelp}</p>}
               </div>
               <div className="field">
                 <label htmlFor={`${uid}-stop`}>Stop Age</label>
-                <input
-                  id={`${uid}-stop`}
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={stopAge}
-                  onChange={(e) => setStopAge(Number(e.target.value))}
-                />
+                <NumberField id={`${uid}-stop`} min={1} max={100} value={stopAge} onChange={setStopAge} />
                 {stopHelp && <p className="caption">{stopHelp}</p>}
               </div>
             </div>
@@ -178,15 +160,7 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
           {applyInflation && (
             <div className="field" style={{ maxWidth: 220 }}>
               <label htmlFor={`${uid}-inflation`}>Inflation Rate (%)</label>
-              <input
-                id={`${uid}-inflation`}
-                type="number"
-                min={0}
-                max={20}
-                step="any"
-                value={inflationRate}
-                onChange={(e) => setInflationRate(Number(e.target.value))}
-              />
+              <NumberField id={`${uid}-inflation`} min={0} max={20} step="any" value={inflationRate} onChange={setInflationRate} />
             </div>
           )}
         </>
