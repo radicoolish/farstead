@@ -1,32 +1,32 @@
-# Farstead — React
+# Farstead — React app
 
-React + TypeScript rewrite of the Streamlit app one level up (`../app.py`). See the scoping
-artifact for the full plan: https://claude.ai/code/artifact/0491843b-4f54-4a8b-9e5d-ad2985cb3b8c
-
-## Status: Phase 0 (Foundation) complete
-
-- `src/calc/` — the full calculation engine, ported from `app.py` and verified against it:
-  age math, the federal/state tax estimator, the Social Security estimator, 401(k) balance
-  projection, household income/withdrawal/Social Security/expense projections. No UI depends
-  on this yet — `App.tsx` is a placeholder.
-- `src/calc/*.test.ts` — 43 unit tests (Vitest), several with expected values cross-checked
-  against independent from-scratch reference calculations (not copy-pasted from app.py) to
-  catch porting mistakes in either direction.
-- No chart-shaping logic ported yet (the household scenario-combination generator, the
-  expense chart data-frame builder) — those are tied to how Recharts will actually want the
-  data shaped, better decided when the chart components are built (Phase 2+) than guessed now.
+The active codebase — see the [repo root README](../README.md) for the full feature list,
+install instructions, and project structure. This file covers just the day-to-day commands
+for working in `web/`.
 
 ## Commands
 
 ```bash
-npm install       # first time only
-npm run dev       # dev server, http://localhost:5173
-npm run build     # type-check + production build
-npm run test      # run the test suite once
+npm install          # first time only
+npm run dev           # dev server, http://localhost:5173
+npm run build          # type-check + production build to dist/
+npm run preview        # serve the production build locally
+npm run test            # run the test suite once (Vitest)
 npm run test:watch
+npm run lint             # oxlint
+npm run tauri build       # desktop installer (needs the Rust toolchain — see root README)
 ```
 
-## Next steps (see the scoping artifact for the full phase list)
+## Notes for contributors
 
-Phase 1: Income section — person CRUD, tax estimator, localStorage persistence wired end to
-end. This is the first phase that touches UI at all.
+- `src/calc/` has no React dependency and is the source of truth for every number the app
+  shows — port logic here first, wire it into components second.
+- Number inputs use `<NumberField>` (`src/components/NumberField.tsx`), not raw
+  `<input type="number">` — it fixes the classic "clearing the field snaps back to 0"
+  controlled-input bug.
+- Color tokens live in `src/index.css` as CSS custom properties (light + dark + explicit
+  toggle) and are hand-verified against WCAG 2.1 AA — don't hardcode colors in components.
+- `npm run build` uses the default `base: '/'`; the GitHub Pages deploy workflow overrides it
+  with `--base=/farstead/` for that one build only (see
+  `../.github/workflows/deploy-pages.yml`). Local dev and the Tauri desktop build are
+  unaffected.
