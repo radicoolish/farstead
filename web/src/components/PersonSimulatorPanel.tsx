@@ -73,8 +73,9 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
         </button>
       </div>
 
-      <div className="field-row">
-        <div>
+      <details className="panel" style={{ marginTop: "0.75rem" }}>
+        <summary>Income &amp; Balance</summary>
+        <div className="panel-body field-row">
           <div className="field">
             <label htmlFor={id("salary")}>Salary ($/yr)</label>
             <NumberField id={id("salary")} min={0} step="any" value={sim.fields.currentSalary} onChange={(v) => updateField("currentSalary", v)} />
@@ -114,7 +115,11 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
             />
           </div>
         </div>
-        <div>
+      </details>
+
+      <details className="panel" style={{ marginTop: "0.75rem" }}>
+        <summary>Contribution &amp; Growth</summary>
+        <div className="panel-body">
           <SliderField
             label="% of Salary Contributed"
             value={sim.fields.contributionPct}
@@ -161,7 +166,11 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
             onChange={(v) => updateField("taxRatePct", v)}
           />
         </div>
-        <div>
+      </details>
+
+      <details className="panel" style={{ marginTop: "0.75rem" }}>
+        <summary>Timeline</summary>
+        <div className="panel-body">
           <SliderField
             label="Retirement / Draw Age"
             value={sim.fields.retirementAge}
@@ -187,7 +196,7 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
             onChange={(v) => updateField("socialSecurityClaimAge", v)}
           />
         </div>
-      </div>
+      </details>
 
       <details className="panel" style={{ marginTop: "0.75rem" }}>
         <summary>Simulate an Income Change</summary>

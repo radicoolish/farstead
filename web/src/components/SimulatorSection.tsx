@@ -3,6 +3,7 @@ import { EXPENSE_HORIZON_AGE, type PersonOverrides } from "../calc";
 import { useAppData } from "../state/AppDataContext";
 import { PersonSimulatorPanel } from "./PersonSimulatorPanel";
 import { SimulatorCharts } from "./SimulatorCharts";
+import { SimulatorComparisonBoxes } from "./SimulatorComparisonBoxes";
 import { initialSimState, overridesFromSimState, type PersonSimState } from "../simulator/state";
 import { NumberField } from "./NumberField";
 import { SECTION_META } from "./AppNav";
@@ -22,6 +23,7 @@ export function SimulatorSection() {
   const [simStates, setSimStates] = useState<Record<string, PersonSimState>>({});
   const [simWithdrawalRatePct, setSimWithdrawalRatePct] = useState(actualWithdrawalRatePct);
   const [resetKey, setResetKey] = useState(0);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
 
   function getSimState(person: (typeof people)[number]): PersonSimState {
     return simStates[person.id] ?? initialSimState(person);
@@ -54,6 +56,8 @@ export function SimulatorSection() {
     simOverridesByPersonId[person.id] = overridesFromSimState(getSimState(person));
   }
 
+  const selectedPerson = people.find((p) => p.id === selectedPersonId) ?? people[0];
+
   return (
     <section>
       <h2 className="section-title">
@@ -80,16 +84,33 @@ export function SimulatorSection() {
         </button>
       </div>
 
-      {people.map((person) => (
-        <details key={`${person.id}-${resetKey}`} className="panel" open>
-          <summary>{person.name}</summary>
-          <div className="panel-body">
-            <PersonSimulatorPanel person={person} sim={getSimState(person)} onChange={(next) => handleChange(person.id, next)} />
-          </div>
-        </details>
-      ))}
+      {people.length > 1 && (
+        <div className="field" style={{ maxWidth: 280 }}>
+          <label htmlFor="sim-person-select">Person</label>
+          <select id="sim-person-select" value={selectedPerson.id} onChange={(e) => setSelectedPersonId(e.target.value)}>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+          <p className="caption">Everyone's simulated changes still count toward the comparison below — this just switches whose inputs you're editing.</p>
+        </div>
+      )}
+
+      <div key={`${selectedPerson.id}-${resetKey}`} className="card">
+        <PersonSimulatorPanel person={selectedPerson} sim={getSimState(selectedPerson)} onChange={(next) => handleChange(selectedPerson.id, next)} />
+      </div>
 
       <h3>Actual vs. Simulated</h3>
+      <SimulatorComparisonBoxes
+        people={people}
+        expenses={expenses}
+        currentAge={currentAge}
+        actualWithdrawalRatePct={actualWithdrawalRatePct}
+        simWithdrawalRatePct={simWithdrawalRatePct}
+        simOverridesByPersonId={simOverridesByPersonId}
+      />
       <SimulatorCharts
         people={people}
         expenses={expenses}
