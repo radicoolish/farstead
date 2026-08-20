@@ -314,6 +314,12 @@ button.danger:hover {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  /* On phones with a notch/status-bar cutout (and Android's edge-to-edge
+     rendering in the native app), the WebView draws under the system bars
+     by default — push actual content below the status bar while letting
+     the nav's own background keep extending behind it, rather than
+     leaving a stark gap or letting icons collide with the clock/battery. */
+  padding-top: env(safe-area-inset-top);
 }
 
 .app-nav-inner {
@@ -488,7 +494,7 @@ button.danger:hover {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 4.5rem 1.5rem 1.5rem;
+  padding: calc(4.5rem + env(safe-area-inset-top)) 1.5rem calc(1.5rem + env(safe-area-inset-bottom));
   z-index: 50;
   animation: modal-backdrop-enter 0.15s ease both;
 }
