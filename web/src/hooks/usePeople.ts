@@ -29,11 +29,10 @@ function normalizePerson(person: Partial<Person> & Pick<Person, "id" | "name" | 
 export type PersonDraft = Omit<Person, "id" | "scenarios">;
 export type ScenarioDraft = Omit<Scenario, "id">;
 
-/** Matches app.py's SCENARIO_FIELDS cap — the household combination chart
- * (Base + every scenario, cross-multiplied across everyone) gets
- * unreadable well before this, so it's as much a UX guardrail as anything
- * else. */
-export const MAX_SCENARIOS_PER_PERSON = 4;
+/** The household combination chart (Base + every scenario,
+ * cross-multiplied across everyone) gets unreadable well before this, so
+ * it's as much a UX guardrail as anything else. */
+export const MAX_SCENARIOS_PER_PERSON = 2;
 
 /** People state, backed by localStorage — the React equivalent of the
  * Streamlit app's `st.session_state.people` + people.json round trip.
