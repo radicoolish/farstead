@@ -607,6 +607,18 @@ button.danger:hover {
   border-top: 1px solid var(--border);
 }
 
+/* ---------- Chart tabs ---------- */
+/* A row of buttons picking which single chart to show — used where a page
+   used to show several small charts at once (harder to read any one of
+   them) and now shows one at a time instead. */
+
+.chart-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 /* ---------- Fixed chart grids ---------- */
 /* Unlike ChartGrid's auto-fit (which wraps to however many columns fit),
    this keeps a fixed column count so a chart set always lands in the same

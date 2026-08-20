@@ -6,6 +6,7 @@ import {
   type Person,
   type PersonOverrides,
   type SimulatorComparisonMetrics,
+  type WithdrawalRate,
 } from "../calc";
 
 function formatYears(metrics: SimulatorComparisonMetrics): string {
@@ -47,19 +48,19 @@ export function SimulatorComparisonBoxes({
   people,
   expenses,
   currentAge,
-  actualWithdrawalRatePct,
-  simWithdrawalRatePct,
+  actualWithdrawalRate,
+  simWithdrawalRate,
   simOverridesByPersonId,
 }: {
   people: Person[];
   expenses: Expense[];
   currentAge: number;
-  actualWithdrawalRatePct: number;
-  simWithdrawalRatePct: number;
+  actualWithdrawalRate: WithdrawalRate;
+  simWithdrawalRate: WithdrawalRate;
   simOverridesByPersonId: Record<string, PersonOverrides>;
 }) {
-  const actual = computeSimulatorComparisonMetrics(people, expenses, currentAge, actualWithdrawalRatePct);
-  const sim = computeSimulatorComparisonMetrics(people, expenses, currentAge, simWithdrawalRatePct, simOverridesByPersonId);
+  const actual = computeSimulatorComparisonMetrics(people, expenses, currentAge, actualWithdrawalRate);
+  const sim = computeSimulatorComparisonMetrics(people, expenses, currentAge, simWithdrawalRate, simOverridesByPersonId);
 
   const balanceDiff = sim.combinedBalanceAtRetirement - actual.combinedBalanceAtRetirement;
   const yearsDiff = sim.yearsOfDraw - actual.yearsOfDraw;

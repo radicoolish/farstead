@@ -13,6 +13,7 @@ import {
   projectHouseholdWithdrawalIncomeByAge,
 } from "../calc";
 import { useAppData } from "../state/AppDataContext";
+import { resolveWithdrawalRate } from "../state/withdrawalRate";
 import { SECTION_META } from "./AppNav";
 import { StatTile } from "./StatTile";
 import { ChartCard } from "../chart/ChartCard";
@@ -47,7 +48,7 @@ const PERIOD_META: Record<Period, { label: string; help: string }> = {
  * period, since a balance is a stock, not a flow — "average balance
  * during a period" isn't a meaningful figure the way average income is. */
 export function SummarySection() {
-  const { people, expenses, currentAge, withdrawalRatePct } = useAppData();
+  const { people, expenses, currentAge, withdrawalRate } = useAppData();
   const uid = useId();
   const [period, setPeriod] = useState<Period>("total");
 
@@ -89,7 +90,7 @@ export function SummarySection() {
         : [currentAge, EXPENSE_HORIZON_AGE];
 
   const incomeByAge = projectHouseholdNetIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE);
-  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRatePct);
+  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, resolveWithdrawalRate(withdrawalRate));
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
 
@@ -210,7 +211,11 @@ export function SummarySection() {
         })}
       </div>
 
-      <ChartCard title="Household Surplus / Deficit" height={280}>
+      <ChartCard
+        title="Household Surplus / Deficit"
+        subtitle="Total income (earned + 401(k) withdrawal + Social Security) minus total expenses, by age."
+        height={280}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
             <AreaGradientDefs

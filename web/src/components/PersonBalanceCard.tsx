@@ -47,6 +47,9 @@ export function PersonBalanceCard({ person }: { person: Person }) {
         {person.name} — Age {age} — {person.accountType}
       </p>
 
+      <p className="caption" style={{ marginTop: 0, marginBottom: "0.25rem" }}>
+        Base assumption vs. each saved scenario, projected to retirement.
+      </p>
       <div style={{ width: "100%", height: 300 }}>
         <BalanceChart person={person} />
       </div>

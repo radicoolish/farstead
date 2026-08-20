@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   projectHouseholdNetIncomeByAge,
@@ -8,13 +8,45 @@ import {
   type Expense,
   type Person,
   type PersonOverrides,
+  type WithdrawalRate,
 } from "../calc";
-import { ChartCard, ChartGrid } from "../chart/ChartCard";
+import { ChartCard } from "../chart/ChartCard";
 import { AreaGradientDefs } from "../chart/AreaGradient";
 import { ACTUAL_LINE_COLOR } from "../chart/palette";
 import { formatAxisCurrency, formatFullCurrency } from "../chart/format";
 
 type Row = { age: number; Actual: number; Simulated: number };
+
+type ChartKey = "income" | "withdrawal" | "socialSecurity" | "surplus";
+
+const CHART_META: Record<ChartKey, { label: string; title: string; subtitle: string; color: string }> = {
+  income: {
+    label: "Income",
+    title: "Income",
+    subtitle: "Combined take-home pay, actual vs. simulated, until each person retires.",
+    color: "#2563eb",
+  },
+  withdrawal: {
+    label: "401(k) Withdrawal",
+    title: "401k Withdrawal",
+    subtitle: "Income from 401(k) withdrawals, actual vs. simulated.",
+    color: "#16a34a",
+  },
+  socialSecurity: {
+    label: "Social Security",
+    title: "Social Security",
+    subtitle: "Combined Social Security benefit, actual vs. simulated.",
+    color: "#0d9488",
+  },
+  surplus: {
+    label: "Surplus / Deficit",
+    title: "Surplus / Deficit",
+    subtitle: "Total income minus total expenses, actual vs. simulated.",
+    color: "#16a34a",
+  },
+};
+
+const CHART_ORDER: ChartKey[] = ["income", "withdrawal", "socialSecurity", "surplus"];
 
 function DualAreaChart({ data, color, actualGradId, simGradId }: { data: Row[]; color: string; actualGradId: string; simGradId: string }) {
   return (
@@ -45,37 +77,39 @@ function DualAreaChart({ data, color, actualGradId, simGradId }: { data: Row[]; 
   );
 }
 
-/** Actual-vs-Simulated comparison: four panels (Income, 401(k) Withdrawal,
- * Social Security, Surplus/Deficit) each showing the household's real,
+/** Actual-vs-Simulated comparison: one chart at a time (Income, 401(k)
+ * Withdrawal, Social Security, Surplus/Deficit), picked via tabs rather
+ * than shown all at once — easier to actually read a single line pair
+ * than four small charts at a glance. Each shows the household's real,
  * saved projection alongside the freely-edited simulator projection.
  * Expenses aren't simulated (nothing in the Simulator can change them), so
- * unlike HouseholdCashFlowCharts there's no separate Expenses panel — it's
+ * unlike HouseholdCashFlowCharts there's no separate Expenses tab — it's
  * folded into the Surplus/Deficit math the same way for both series. Kept
- * to these four panels (no 401k Balance panel) since that addition was
- * scoped to the Household Expenses section's actual-data view. Mirrors
- * app.py's render_simulator_charts. */
+ * to these four (no 401k Balance tab) since that addition was scoped to
+ * the Household Expenses section's actual-data view. */
 export function SimulatorCharts({
   people,
   expenses,
   currentAge,
   horizonAge,
-  actualWithdrawalRatePct,
-  simWithdrawalRatePct,
+  actualWithdrawalRate,
+  simWithdrawalRate,
   simOverridesByPersonId,
 }: {
   people: Person[];
   expenses: Expense[];
   currentAge: number;
   horizonAge: number;
-  actualWithdrawalRatePct: number;
-  simWithdrawalRatePct: number;
+  actualWithdrawalRate: WithdrawalRate;
+  simWithdrawalRate: WithdrawalRate;
   simOverridesByPersonId: Record<string, PersonOverrides>;
 }) {
   const uid = useId();
+  const [activeChart, setActiveChart] = useState<ChartKey>("income");
   const actualIncome = projectHouseholdNetIncomeByAge(people, currentAge, horizonAge);
   const simIncome = projectHouseholdNetIncomeByAge(people, currentAge, horizonAge, simOverridesByPersonId);
-  const actualWithdrawal = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, actualWithdrawalRatePct);
-  const simWithdrawal = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, simWithdrawalRatePct, simOverridesByPersonId);
+  const actualWithdrawal = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, actualWithdrawalRate);
+  const simWithdrawal = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, simWithdrawalRate, simOverridesByPersonId);
   const actualSs = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge);
   const simSs = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge, simOverridesByPersonId);
   const expByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, horizonAge);
@@ -100,20 +134,33 @@ export function SimulatorCharts({
     surplusRows.push({ age, Actual: aInc + aWd + aSs - exp, Simulated: sInc + sWd + sSs - exp });
   }
 
+  const rowsByChart: Record<ChartKey, Row[]> = {
+    income: incomeRows,
+    withdrawal: withdrawalRows,
+    socialSecurity: ssRows,
+    surplus: surplusRows,
+  };
+  const meta = CHART_META[activeChart];
+
   return (
-    <ChartGrid>
-      <ChartCard title="Income">
-        <DualAreaChart data={incomeRows} color="#2563eb" actualGradId={`${uid}-inc-a`} simGradId={`${uid}-inc-s`} />
+    <div>
+      <div className="chart-tabs" role="tablist" aria-label="Simulator chart">
+        {CHART_ORDER.map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={activeChart === key}
+            className={activeChart === key ? "primary" : undefined}
+            onClick={() => setActiveChart(key)}
+          >
+            {CHART_META[key].label}
+          </button>
+        ))}
+      </div>
+      <ChartCard title={meta.title} subtitle={meta.subtitle} height={340}>
+        <DualAreaChart data={rowsByChart[activeChart]} color={meta.color} actualGradId={`${uid}-${activeChart}-a`} simGradId={`${uid}-${activeChart}-s`} />
       </ChartCard>
-      <ChartCard title="401k Withdrawal">
-        <DualAreaChart data={withdrawalRows} color="#16a34a" actualGradId={`${uid}-wd-a`} simGradId={`${uid}-wd-s`} />
-      </ChartCard>
-      <ChartCard title="Social Security">
-        <DualAreaChart data={ssRows} color="#0d9488" actualGradId={`${uid}-ss-a`} simGradId={`${uid}-ss-s`} />
-      </ChartCard>
-      <ChartCard title="Surplus / Deficit">
-        <DualAreaChart data={surplusRows} color="#16a34a" actualGradId={`${uid}-sur-a`} simGradId={`${uid}-sur-s`} />
-      </ChartCard>
-    </ChartGrid>
+    </div>
   );
 }

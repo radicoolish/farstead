@@ -130,11 +130,26 @@ describe("projectHouseholdWithdrawalIncomeByAge", () => {
     // start in sync, exactly like the app's "Current Age (for projection)"
     // input defaults to the first person's real age.
     const person = makePerson();
-    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, 4, {}, TODAY);
+    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
     expect(totals.get(65)).toBe(0); // retirement year itself: no withdrawal yet
     expect(totals.get(66)).toBeCloseTo(38834.45, 1);
     expect(totals.get(67)).toBeCloseTo(39517.94, 1);
     expect(totals.get(68)).toBeCloseTo(40213.46, 1);
+  });
+
+  it("in dollar mode, withdraws the fixed amount and clamps once the balance runs out", () => {
+    // Retires immediately (retirementAge === current age) so the starting
+    // balance is exactly currentBalance, with 0% growth so depletion is
+    // pure subtraction — easy to hand-verify, and demonstrates the one
+    // thing percent mode structurally can't: actually hitting zero.
+    const person = makePerson({ retirementAge: 40, currentBalance: 10000, growthRatePct: 0 });
+    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 45, { mode: "dollar", value: 3000 }, {}, TODAY);
+    expect(totals.get(40)).toBe(0); // retirement year itself: no withdrawal yet
+    expect(totals.get(41)).toBeCloseTo(3000, 2); // 10000 -> 7000
+    expect(totals.get(42)).toBeCloseTo(3000, 2); // 7000 -> 4000
+    expect(totals.get(43)).toBeCloseTo(3000, 2); // 4000 -> 1000
+    expect(totals.get(44)).toBeCloseTo(1000, 2); // clamped: only 1000 left
+    expect(totals.get(45)).toBe(0); // balance fully depleted — stays 0, not negative
   });
 });
 
@@ -197,7 +212,7 @@ describe("market conditions", () => {
 describe("projectHouseholdBalanceByAge", () => {
   it("matches projectBalance's own trajectory before retirement", () => {
     const person = makePerson();
-    const totals = projectHouseholdBalanceByAge([person], 40, 68, 4, {}, TODAY);
+    const totals = projectHouseholdBalanceByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
     // From the projectBalance suite: balance(41) = 24600 exactly.
     expect(totals.get(41)).toBeCloseTo(24600, 1);
     // From the projectBalance suite: balance(65, at retirement) = 970861.36.
@@ -206,8 +221,8 @@ describe("projectHouseholdBalanceByAge", () => {
 
   it("depletes by the withdrawal rate after retirement, cross-checked against projectHouseholdWithdrawalIncomeByAge", () => {
     const person = makePerson();
-    const balances = projectHouseholdBalanceByAge([person], 40, 68, 4, {}, TODAY);
-    const withdrawals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, 4, {}, TODAY);
+    const balances = projectHouseholdBalanceByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
+    const withdrawals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
     // The withdrawal taken at each age is exactly 4% of the balance this
     // function reports for the *previous* age — the two functions share
     // the same underlying depletion mechanics, just exposing different
@@ -216,11 +231,19 @@ describe("projectHouseholdBalanceByAge", () => {
     expect(balances.get(67)! * 0.04).toBeCloseTo(withdrawals.get(68)!, 1);
   });
 
+  it("in dollar mode, the balance itself reaches exactly zero and stays there", () => {
+    const person = makePerson({ retirementAge: 40, currentBalance: 10000, growthRatePct: 0 });
+    const totals = projectHouseholdBalanceByAge([person], 40, 45, { mode: "dollar", value: 3000 }, {}, TODAY);
+    expect(totals.get(43)).toBeCloseTo(1000, 2);
+    expect(totals.get(44)).toBe(0);
+    expect(totals.get(45)).toBe(0);
+  });
+
   it("sums independently across multiple people", () => {
     const alice = makePerson({ id: "alice" });
     const bob = makePerson({ id: "bob" });
-    const solo = projectHouseholdBalanceByAge([alice], 40, 45, 4, {}, TODAY).get(42)!;
-    const pair = projectHouseholdBalanceByAge([alice, bob], 40, 45, 4, {}, TODAY).get(42)!;
+    const solo = projectHouseholdBalanceByAge([alice], 40, 45, { mode: "percent", value: 4 }, {}, TODAY).get(42)!;
+    const pair = projectHouseholdBalanceByAge([alice, bob], 40, 45, { mode: "percent", value: 4 }, {}, TODAY).get(42)!;
     expect(pair).toBeCloseTo(solo * 2, 2);
   });
 });

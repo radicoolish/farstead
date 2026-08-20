@@ -133,10 +133,17 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
             </p>
           )}
 
-          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 400, marginBottom: "0.75rem" }}>
-            <input type="checkbox" checked={isPerpetuity} onChange={(e) => setIsPerpetuity(e.target.checked)} />
-            Perpetuity (runs the whole projection)
-          </label>
+          <div className="field" style={{ maxWidth: 220 }}>
+            <label htmlFor={`${uid}-recurring`}>Duration</label>
+            <select
+              id={`${uid}-recurring`}
+              value={isPerpetuity ? "recurring" : "window"}
+              onChange={(e) => setIsPerpetuity(e.target.value === "recurring")}
+            >
+              <option value="recurring">Recurring</option>
+              <option value="window">Start/Stop Age</option>
+            </select>
+          </div>
 
           {!isPerpetuity && (
             <div className="field-row">
@@ -153,10 +160,17 @@ export function ExpenseForm({ currentAge, onAdd }: ExpenseFormProps) {
             </div>
           )}
 
-          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 400, marginBottom: "0.5rem" }}>
-            <input type="checkbox" checked={applyInflation} onChange={(e) => setApplyInflation(e.target.checked)} />
-            Apply Inflation
-          </label>
+          <div className="field" style={{ maxWidth: 220 }}>
+            <label htmlFor={`${uid}-apply-inflation`}>Inflation</label>
+            <select
+              id={`${uid}-apply-inflation`}
+              value={applyInflation ? "yes" : "no"}
+              onChange={(e) => setApplyInflation(e.target.value === "yes")}
+            >
+              <option value="no">Fixed (no inflation)</option>
+              <option value="yes">Apply Inflation</option>
+            </select>
+          </div>
           {applyInflation && (
             <div className="field" style={{ maxWidth: 220 }}>
               <label htmlFor={`${uid}-inflation`}>Inflation Rate (%)</label>

@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { EXPENSE_HORIZON_AGE } from "../calc";
 import { useAppData } from "../state/AppDataContext";
+import { withdrawalRateFromSettings } from "../state/withdrawalRate";
 import { buildExportPayload, downloadJson, validateImportPayload, type ExportPayload } from "../storage/importExport";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -18,8 +19,8 @@ export function DataManagementSection() {
     expenses,
     currentAge,
     setCurrentAge,
-    withdrawalRatePct,
-    setWithdrawalRatePct,
+    withdrawalRate,
+    setWithdrawalRate,
     replacePeople,
     clearPeople,
     replaceExpenses,
@@ -37,7 +38,7 @@ export function DataManagementSection() {
 
   function handleSave() {
     const name = fileName.trim() || `investment-scenarios-${today()}.json`;
-    downloadJson(buildExportPayload(people, expenses, currentAge, withdrawalRatePct), name.toLowerCase().endsWith(".json") ? name : `${name}.json`);
+    downloadJson(buildExportPayload(people, expenses, currentAge, withdrawalRate), name.toLowerCase().endsWith(".json") ? name : `${name}.json`);
   }
 
   function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -74,9 +75,8 @@ export function DataManagementSection() {
     if (importPayload.settings?.currentAge != null) {
       setCurrentAge(Math.max(1, Math.min(EXPENSE_HORIZON_AGE - 1, importPayload.settings.currentAge)));
     }
-    if (importPayload.settings?.withdrawalRatePct != null) {
-      setWithdrawalRatePct(Math.max(0, Math.min(20, importPayload.settings.withdrawalRatePct)));
-    }
+    const importedRate = importPayload.settings && withdrawalRateFromSettings(importPayload.settings);
+    if (importedRate) setWithdrawalRate(importedRate);
     setImportPayload(null);
     setImportError(null);
     setImportedFileName(null);

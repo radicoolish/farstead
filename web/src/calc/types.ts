@@ -108,6 +108,15 @@ export interface Expense {
 
 export const EXPENSE_HORIZON_AGE = 85;
 
+/** How much to withdraw from a 401(k) balance each year in retirement —
+ * either a percentage of that year's balance (the classic "4% rule" style,
+ * where the balance shrinks toward zero but never mathematically reaches
+ * it) or a fixed dollar amount (which does fully deplete the balance in
+ * finite years, once it runs out). Always evaluated per person, same as
+ * the withdrawal math it replaces — not a household total split across
+ * people. */
+export type WithdrawalRate = { mode: "percent"; value: number } | { mode: "dollar"; value: number };
+
 /** A single point on a year-by-year 401(k) balance projection. */
 export interface BalancePoint {
   age: number;

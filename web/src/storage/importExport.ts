@@ -1,4 +1,5 @@
 import type { Expense, Person } from "../calc";
+import type { WithdrawalRateState } from "../state/withdrawalRate";
 
 // JSON export/import for this app's own (camelCase) schema — not required
 // to round-trip with the Streamlit app's snake_case people.json/expenses.json;
@@ -12,7 +13,15 @@ export interface ExportPayload {
   expenses: Expense[];
   settings: {
     currentAge: number;
+    /** Kept for files exported before the %-or-$ withdrawal toggle existed
+     * — always the percent value, regardless of withdrawalMode, so an
+     * older build of this app (or anything else reading this file) still
+     * gets a sane number here. */
     withdrawalRatePct: number;
+    /** Present since the %-or-$ toggle was added — absent on older
+     * exports, which importPayloadSettings treats as percent mode. */
+    withdrawalMode?: "percent" | "dollar";
+    withdrawalDollar?: number;
   };
 }
 
@@ -27,7 +36,7 @@ export function buildExportPayload(
   people: Person[],
   expenses: Expense[],
   currentAge: number,
-  withdrawalRatePct: number,
+  withdrawalRate: WithdrawalRateState,
 ): ExportPayload {
   return {
     app: "farstead-web",
@@ -35,7 +44,12 @@ export function buildExportPayload(
     exportedAt: new Date().toISOString().slice(0, 10),
     people,
     expenses,
-    settings: { currentAge, withdrawalRatePct },
+    settings: {
+      currentAge,
+      withdrawalRatePct: withdrawalRate.percent,
+      withdrawalMode: withdrawalRate.mode,
+      withdrawalDollar: withdrawalRate.dollar,
+    },
   };
 }
 

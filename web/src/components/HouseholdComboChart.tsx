@@ -30,7 +30,10 @@ export function HouseholdComboChart({ combos, totalCombos }: { combos: Household
 
   return (
     <div>
-      <p style={{ fontWeight: 650 }}>All Scenario Combinations ({totalCombos})</p>
+      <p style={{ fontWeight: 650, marginBottom: "0.15rem" }}>All Scenario Combinations ({totalCombos})</p>
+      <p className="caption" style={{ marginTop: 0, marginBottom: "0.75rem" }}>
+        Every combination of each person's saved scenarios, projected together — final balance listed below each line.
+      </p>
       <div style={{ height: 360 }}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={lineData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { usePeople } from "../hooks/usePeople";
 import { useExpenses } from "../hooks/useExpenses";
 import { calculateAge, EXPENSE_HORIZON_AGE } from "../calc";
+import { defaultWithdrawalRateState, type WithdrawalRateState } from "./withdrawalRate";
 
 type AppData = ReturnType<typeof usePeople> &
   ReturnType<typeof useExpenses> & {
@@ -17,8 +18,8 @@ type AppData = ReturnType<typeof usePeople> &
      * Expenses section — the Simulator has its own independent rate on
      * top of this (that one only affects 401(k) withdrawals, not
      * expenses, so there's no equivalent correctness reason to share it). */
-    withdrawalRatePct: number;
-    setWithdrawalRatePct: (rate: number) => void;
+    withdrawalRate: WithdrawalRateState;
+    setWithdrawalRate: (rate: WithdrawalRateState) => void;
   };
 
 const AppDataContext = createContext<AppData | null>(null);
@@ -34,9 +35,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const defaultCurrentAge = peopleApi.people.length > 0 ? calculateAge(peopleApi.people[0].birthday) : 35;
   const [currentAge, setCurrentAge] = useState(() => Math.min(defaultCurrentAge, EXPENSE_HORIZON_AGE - 1));
-  const [withdrawalRatePct, setWithdrawalRatePct] = useState(4);
+  const [withdrawalRate, setWithdrawalRate] = useState<WithdrawalRateState>(() => defaultWithdrawalRateState());
 
-  const value: AppData = { ...peopleApi, ...expensesApi, currentAge, setCurrentAge, withdrawalRatePct, setWithdrawalRatePct };
+  const value: AppData = { ...peopleApi, ...expensesApi, currentAge, setCurrentAge, withdrawalRate, setWithdrawalRate };
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }
 

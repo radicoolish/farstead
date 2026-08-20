@@ -142,13 +142,20 @@ describe("computeSimulatorComparisonMetrics", () => {
     // yearsToGrow = max(retirementAge - age, 0) = 0, so projectBalance can't apply any growth/contributions.
     const alice = makePerson({ id: "alice", birthday: "1966-01-01", retirementAge: 60, currentBalance: 100000 });
     const bob = makePerson({ id: "bob", birthday: "1966-01-01", retirementAge: 60, currentBalance: 150000 });
-    const metrics = computeSimulatorComparisonMetrics([alice, bob], [], 60, 4, {}, TODAY);
+    const metrics = computeSimulatorComparisonMetrics([alice, bob], [], 60, { mode: "percent", value: 4 }, {}, TODAY);
     expect(metrics.combinedBalanceAtRetirement).toBeCloseTo(250000, 2);
   });
 
   it("an override changes the balance used, not the saved person's own value", () => {
     const alice = makePerson({ id: "alice", birthday: "1966-01-01", retirementAge: 60, currentBalance: 100000 });
-    const metrics = computeSimulatorComparisonMetrics([alice], [], 60, 4, { alice: { currentBalance: 500000 } }, TODAY);
+    const metrics = computeSimulatorComparisonMetrics(
+      [alice],
+      [],
+      60,
+      { mode: "percent", value: 4 },
+      { alice: { currentBalance: 500000 } },
+      TODAY,
+    );
     expect(metrics.combinedBalanceAtRetirement).toBeCloseTo(500000, 2);
   });
 
@@ -162,7 +169,7 @@ describe("computeSimulatorComparisonMetrics", () => {
       socialSecurityMonthly: 5000,
     });
     const expenses = [makeExpense({ monthlyAmount: 500 })];
-    const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, 4, {}, TODAY);
+    const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, { mode: "percent", value: 4 }, {}, TODAY);
     expect(metrics.lastsFullHorizon).toBe(true);
     expect(metrics.yearsOfDraw).toBe(85 - 60);
   });
@@ -176,10 +183,27 @@ describe("computeSimulatorComparisonMetrics", () => {
       socialSecurityMonthly: 0,
     });
     const expenses = [makeExpense({ monthlyAmount: 50000 / 12 })];
-    const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, 4, {}, TODAY);
+    const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, { mode: "percent", value: 4 }, {}, TODAY);
     expect(metrics.lastsFullHorizon).toBe(false);
     // Earned income still covers age 60 itself (the retirement-age year);
     // income stops the year after, so the deficit lands at 61 — 1 year of draw.
     expect(metrics.yearsOfDraw).toBe(1);
+  });
+
+  it("works in dollar mode too, where the withdrawal actually runs out", () => {
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1966-01-01",
+      retirementAge: 60,
+      currentBalance: 20000,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    // $10k/yr withdrawal covers the $9k/yr expenses for 2 years (age 61,
+    // 62), then the $20k balance is exhausted and age 63 goes into deficit.
+    const expenses = [makeExpense({ monthlyAmount: 750 })];
+    const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, { mode: "dollar", value: 10000 }, {}, TODAY);
+    expect(metrics.lastsFullHorizon).toBe(false);
+    expect(metrics.yearsOfDraw).toBe(3);
   });
 });

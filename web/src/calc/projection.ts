@@ -1,6 +1,14 @@
 import { calculateAge } from "./age";
 import { DEFAULT_MARKET_CONDITION_DURATION_YEARS, effectiveGrowthRateForYear, MARKET_CONDITIONS } from "./marketConditions";
-import type { BalancePoint, ByAge, IncomeChange, Person, PersonOverrides } from "./types";
+import type { BalancePoint, ByAge, IncomeChange, Person, PersonOverrides, WithdrawalRate } from "./types";
+
+/** One year's withdrawal from a single balance — a percentage of that
+ * balance, or a fixed dollar amount clamped to what's actually left (so a
+ * fixed withdrawal can't take the balance negative once it runs out). */
+function withdrawalAmountForYear(rate: WithdrawalRate, balance: number): number {
+  if (rate.mode === "percent") return balance * (rate.value / 100);
+  return Math.min(rate.value, Math.max(0, balance));
+}
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -127,21 +135,20 @@ export function projectHouseholdNetIncomeByAge(
 
 /** 401(k) withdrawal income by household reference age, summed across
  * everyone, starting the year after each person's own earned income stops.
- * Each year's withdrawal is `withdrawalRatePct`% of that person's 401(k)
- * balance at the start of the year (using the chosen scenario's — or, with
- * no override, the base — projection through retirement as the starting
- * balance); the remainder compounds at their own growth rate for next
- * year. Mirrors app.py's project_household_withdrawal_income_by_age. */
+ * Each year's withdrawal is either a percentage of that person's 401(k)
+ * balance at the start of the year, or a fixed dollar amount (see
+ * `WithdrawalRate`) — the balance used (the chosen scenario's, or with no
+ * override the base) is its projection through retirement; the remainder
+ * compounds at their own growth rate for next year. */
 export function projectHouseholdWithdrawalIncomeByAge(
   people: Person[],
   currentAge: number,
   horizonAge: number,
-  withdrawalRatePct: number,
+  withdrawalRate: WithdrawalRate,
   overridesByPersonId: Record<string, PersonOverrides> = {},
   today: Date = new Date(),
 ): ByAge {
   const totals = zeroedByAge(currentAge, horizonAge);
-  const withdrawalRate = withdrawalRatePct / 100;
   for (const person of people) {
     const overrides = overridesByPersonId[person.id] ?? {};
     const effective = effectivePerson(person, overrides);
@@ -157,7 +164,7 @@ export function projectHouseholdWithdrawalIncomeByAge(
 
     for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
       if (personAge + i <= retirementAge) continue;
-      const withdrawal = balance * withdrawalRate;
+      const withdrawal = withdrawalAmountForYear(withdrawalRate, balance);
       addTo(totals, age, withdrawal);
       const yearGrowthRate = effectiveGrowthRateForYear(
         growthRate,
@@ -202,20 +209,20 @@ export function projectHouseholdSocialSecurityByAge(
  * everyone — the running balance itself, not the withdrawal amount.
  * Before a person's own retirement age this is exactly `projectBalance`'s
  * trajectory (growth + contributions); after it, the balance depletes by
- * `withdrawalRatePct`% a year with the remainder still compounding at
- * their own growth rate — the same mechanics that back
+ * `withdrawalRate` a year (percent-of-balance or a fixed dollar amount —
+ * see `WithdrawalRate`) with the remainder still compounding at their own
+ * growth rate — the same mechanics that back
  * projectHouseholdWithdrawalIncomeByAge, just exposing the balance itself
  * instead of only the amount withdrawn from it. */
 export function projectHouseholdBalanceByAge(
   people: Person[],
   currentAge: number,
   horizonAge: number,
-  withdrawalRatePct: number,
+  withdrawalRate: WithdrawalRate,
   overridesByPersonId: Record<string, PersonOverrides> = {},
   today: Date = new Date(),
 ): ByAge {
   const totals = zeroedByAge(currentAge, horizonAge);
-  const withdrawalRate = withdrawalRatePct / 100;
   for (const person of people) {
     const overrides = overridesByPersonId[person.id] ?? {};
     const effective = effectivePerson(person, overrides);
@@ -234,7 +241,7 @@ export function projectHouseholdBalanceByAge(
       if (thisPersonAge <= retirementAge) {
         balance = balanceByPersonAge.get(thisPersonAge) ?? balance;
       } else {
-        const withdrawal = balance * withdrawalRate;
+        const withdrawal = withdrawalAmountForYear(withdrawalRate, balance);
         const yearGrowthRate = effectiveGrowthRateForYear(
           growthRate,
           marketCondition,

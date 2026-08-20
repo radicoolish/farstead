@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { EXPENSE_HORIZON_AGE, type PersonOverrides } from "../calc";
 import { useAppData } from "../state/AppDataContext";
+import { resolveWithdrawalRate, type WithdrawalRateState } from "../state/withdrawalRate";
 import { PersonSimulatorPanel } from "./PersonSimulatorPanel";
 import { SimulatorCharts } from "./SimulatorCharts";
 import { SimulatorComparisonBoxes } from "./SimulatorComparisonBoxes";
 import { initialSimState, overridesFromSimState, type PersonSimState } from "../simulator/state";
-import { NumberField } from "./NumberField";
+import { WithdrawalRateInput } from "./WithdrawalRateInput";
 import { SECTION_META } from "./AppNav";
 
 const { Icon } = SECTION_META.simulator;
@@ -18,10 +19,10 @@ const { Icon } = SECTION_META.simulator;
  * independent input since it only affects 401(k) withdrawals. Mirrors
  * app.py's Section 4 (render_simulator_inputs + render_simulator_charts). */
 export function SimulatorSection() {
-  const { people, expenses, currentAge, withdrawalRatePct: actualWithdrawalRatePct } = useAppData();
+  const { people, expenses, currentAge, withdrawalRate: actualWithdrawalRate } = useAppData();
 
   const [simStates, setSimStates] = useState<Record<string, PersonSimState>>({});
-  const [simWithdrawalRatePct, setSimWithdrawalRatePct] = useState(actualWithdrawalRatePct);
+  const [simWithdrawalRate, setSimWithdrawalRate] = useState<WithdrawalRateState>(actualWithdrawalRate);
   const [resetKey, setResetKey] = useState(0);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
 
@@ -35,7 +36,7 @@ export function SimulatorSection() {
 
   function handleResetAll() {
     setSimStates({});
-    setSimWithdrawalRatePct(actualWithdrawalRatePct);
+    setSimWithdrawalRate(actualWithdrawalRate);
     setResetKey((k) => k + 1);
   }
 
@@ -75,10 +76,7 @@ export function SimulatorSection() {
           <input type="number" value={currentAge} disabled />
           <p className="caption">Locked to the Household Expenses section's Current Age.</p>
         </div>
-        <div className="field" style={{ maxWidth: 220 }}>
-          <label htmlFor="sim-withdrawal-rate">Simulated 401k Withdrawal Rate (%)</label>
-          <NumberField id="sim-withdrawal-rate" min={0} max={20} step="any" value={simWithdrawalRatePct} onChange={setSimWithdrawalRatePct} />
-        </div>
+        <WithdrawalRateInput label="Simulated 401(k) Withdrawal Rate" value={simWithdrawalRate} onChange={setSimWithdrawalRate} />
         <button type="button" onClick={handleResetAll}>
           Reset All to Actual
         </button>
@@ -107,8 +105,8 @@ export function SimulatorSection() {
         people={people}
         expenses={expenses}
         currentAge={currentAge}
-        actualWithdrawalRatePct={actualWithdrawalRatePct}
-        simWithdrawalRatePct={simWithdrawalRatePct}
+        actualWithdrawalRate={resolveWithdrawalRate(actualWithdrawalRate)}
+        simWithdrawalRate={resolveWithdrawalRate(simWithdrawalRate)}
         simOverridesByPersonId={simOverridesByPersonId}
       />
       <SimulatorCharts
@@ -116,8 +114,8 @@ export function SimulatorSection() {
         expenses={expenses}
         currentAge={currentAge}
         horizonAge={EXPENSE_HORIZON_AGE}
-        actualWithdrawalRatePct={actualWithdrawalRatePct}
-        simWithdrawalRatePct={simWithdrawalRatePct}
+        actualWithdrawalRate={resolveWithdrawalRate(actualWithdrawalRate)}
+        simWithdrawalRate={resolveWithdrawalRate(simWithdrawalRate)}
         simOverridesByPersonId={simOverridesByPersonId}
       />
     </section>

@@ -1,10 +1,12 @@
 import { useState, type SyntheticEvent } from "react";
 import { describeExpense, EXPENSE_HORIZON_AGE } from "../calc";
 import { useAppData } from "../state/AppDataContext";
+import { resolveWithdrawalRate } from "../state/withdrawalRate";
 import { ExpenseForm } from "./ExpenseForm";
 import { ExpenseChart } from "./ExpenseChart";
 import { HouseholdCashFlowCharts } from "./HouseholdCashFlowCharts";
 import { NumberField } from "./NumberField";
+import { WithdrawalRateInput } from "./WithdrawalRateInput";
 import { SECTION_META } from "./AppNav";
 
 const { Icon } = SECTION_META.expenses;
@@ -14,8 +16,7 @@ const { Icon } = SECTION_META.expenses;
  * Expenses cash-flow view. Mirrors app.py's Section 3 (which keeps the
  * cash-flow charts here too, not in a separate section). */
 export function ExpensesSection() {
-  const { people, expenses, addExpense, removeExpense, currentAge, setCurrentAge, withdrawalRatePct, setWithdrawalRatePct } =
-    useAppData();
+  const { people, expenses, addExpense, removeExpense, currentAge, setCurrentAge, withdrawalRate, setWithdrawalRate } = useAppData();
 
   const [formOpen, setFormOpen] = useState(() => expenses.length === 0);
 
@@ -64,6 +65,7 @@ export function ExpensesSection() {
           </div>
 
           <h3>Projected Household Expenses</h3>
+          <p className="caption">Every active expense stacked by type, by age — inflation-adjusted costs grow over time.</p>
           <div className="card" style={{ height: 360, marginBottom: "1.5rem" }}>
             <ExpenseChart expenses={expenses} currentAge={currentAge} horizonAge={EXPENSE_HORIZON_AGE} />
           </div>
@@ -77,16 +79,13 @@ export function ExpensesSection() {
             saved data — to explore a 401(k) scenario or freely adjust any input, use the Simulator section
             below.
           </p>
-          <div className="field" style={{ maxWidth: 260, marginBottom: "1rem" }}>
-            <label htmlFor="withdrawal-rate">401k Withdrawal Rate (%)</label>
-            <NumberField id="withdrawal-rate" min={0} max={20} step="any" value={withdrawalRatePct} onChange={setWithdrawalRatePct} />
-          </div>
+          <WithdrawalRateInput label="401(k) Withdrawal Rate" value={withdrawalRate} onChange={setWithdrawalRate} />
           <HouseholdCashFlowCharts
             people={people}
             expenses={expenses}
             currentAge={currentAge}
             horizonAge={EXPENSE_HORIZON_AGE}
-            withdrawalRatePct={withdrawalRatePct}
+            withdrawalRate={resolveWithdrawalRate(withdrawalRate)}
           />
         </>
       )}

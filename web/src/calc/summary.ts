@@ -1,4 +1,4 @@
-import type { ByAge, Expense, Person, PersonOverrides } from "./types";
+import type { ByAge, Expense, Person, PersonOverrides, WithdrawalRate } from "./types";
 import { EXPENSE_HORIZON_AGE } from "./types";
 import { projectBalance, projectHouseholdNetIncomeByAge, projectHouseholdSocialSecurityByAge, projectHouseholdWithdrawalIncomeByAge } from "./projection";
 import { projectHouseholdTotalExpensesByAge } from "./expenses";
@@ -79,7 +79,7 @@ export function computeSimulatorComparisonMetrics(
   people: Person[],
   expenses: Expense[],
   currentAge: number,
-  withdrawalRatePct: number,
+  withdrawalRate: WithdrawalRate,
   overridesByPersonId: Record<string, PersonOverrides> = {},
   today: Date = new Date(),
 ): SimulatorComparisonMetrics {
@@ -90,7 +90,7 @@ export function computeSimulatorComparisonMetrics(
 
   const boundaryAge = householdRetirementBoundaryAge(people, overridesByPersonId);
   const incomeByAge = projectHouseholdNetIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
-  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRatePct, overridesByPersonId, today);
+  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRate, overridesByPersonId, today);
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
 

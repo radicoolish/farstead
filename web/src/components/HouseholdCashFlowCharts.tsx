@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import {
   projectHouseholdBalanceByAge,
@@ -9,8 +9,9 @@ import {
   type Expense,
   type Person,
   type PersonOverrides,
+  type WithdrawalRate,
 } from "../calc";
-import { ChartCard, ChartGrid } from "../chart/ChartCard";
+import { ChartCard } from "../chart/ChartCard";
 import { AreaGradientDefs } from "../chart/AreaGradient";
 import { DEFICIT_COLOR, SURPLUS_COLOR } from "../chart/palette";
 import { formatAxisCurrency, formatFullCurrency } from "../chart/format";
@@ -32,33 +33,78 @@ function SingleAreaChart({ data, dataKey, color, gradId }: { data: Row[]; dataKe
   );
 }
 
+type ChartKey = "income" | "expenses" | "balance" | "withdrawal" | "socialSecurity" | "surplus";
+
+const SIMPLE_CHART_META: Record<Exclude<ChartKey, "surplus">, { label: string; dataKey: string; subtitle: string; color: string }> = {
+  income: {
+    label: "Income",
+    dataKey: "Income",
+    subtitle: "Combined take-home pay, after tax and 401(k) contributions, until each person retires.",
+    color: "#2563eb",
+  },
+  expenses: {
+    label: "Expenses",
+    dataKey: "Expenses",
+    subtitle: "Total household spending across every recurring cost and loan.",
+    color: "#64748b",
+  },
+  balance: {
+    label: "401(k) Balance",
+    dataKey: "401k Balance",
+    subtitle: "Combined 401(k) balance — growing pre-retirement, drawn down after.",
+    color: "#0d9488",
+  },
+  withdrawal: {
+    label: "401(k) Withdrawal",
+    dataKey: "401k Withdrawal",
+    subtitle: "Income from 401(k) withdrawals, once earned income stops.",
+    color: "#16a34a",
+  },
+  socialSecurity: {
+    label: "Social Security",
+    dataKey: "Social Security",
+    subtitle: "Combined benefit once each person reaches their own claim age.",
+    color: "#0891b2",
+  },
+};
+
+const CHART_ORDER: Array<{ key: ChartKey; label: string }> = [
+  { key: "income", label: "Income" },
+  { key: "expenses", label: "Expenses" },
+  { key: "balance", label: "401(k) Balance" },
+  { key: "withdrawal", label: "401(k) Withdrawal" },
+  { key: "socialSecurity", label: "Social Security" },
+  { key: "surplus", label: "Surplus / Deficit" },
+];
+
 /** Six linked charts — Income, Expenses, 401(k) Balance, 401(k)
  * Withdrawal, Social Security, and Surplus/Deficit — off one shared
- * household projection, laid out in a fixed 2-row grid so the whole set
- * stays scannable at a glance. Once a person's earned income stops, their
+ * household projection. Picked one at a time via a dropdown rather than
+ * shown all at once, since six small charts side by side made any single
+ * one harder to actually read. Once a person's earned income stops, their
  * withdrawal income (401(k) balance x withdrawal rate) takes over; Social
  * Security layers in independently once each person reaches their own
- * claim age. Mirrors app.py's render_household_cash_flow_charts, extended
- * with a balance panel the Python version didn't have. */
+ * claim age. */
 export function HouseholdCashFlowCharts({
   people,
   expenses,
   currentAge,
   horizonAge,
-  withdrawalRatePct,
+  withdrawalRate,
   overridesByPersonId,
 }: {
   people: Person[];
   expenses: Expense[];
   currentAge: number;
   horizonAge: number;
-  withdrawalRatePct: number;
+  withdrawalRate: WithdrawalRate;
   overridesByPersonId?: Record<string, PersonOverrides>;
 }) {
   const uid = useId();
+  const [activeChart, setActiveChart] = useState<ChartKey>("income");
   const incomeByAge = projectHouseholdNetIncomeByAge(people, currentAge, horizonAge, overridesByPersonId);
-  const balanceByAge = projectHouseholdBalanceByAge(people, currentAge, horizonAge, withdrawalRatePct, overridesByPersonId);
-  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, withdrawalRatePct, overridesByPersonId);
+  const balanceByAge = projectHouseholdBalanceByAge(people, currentAge, horizonAge, withdrawalRate, overridesByPersonId);
+  const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, withdrawalRate, overridesByPersonId);
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge, overridesByPersonId);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, horizonAge);
 
@@ -87,41 +133,48 @@ export function HouseholdCashFlowCharts({
   const deficitGradId = `${uid}-deficit`;
 
   return (
-    <ChartGrid fixedColumns={3}>
-      <ChartCard title="Income" height={260}>
-        <SingleAreaChart data={data} dataKey="Income" color="#2563eb" gradId={`${uid}-income`} />
-      </ChartCard>
-      <ChartCard title="Expenses" height={260}>
-        <SingleAreaChart data={data} dataKey="Expenses" color="#64748b" gradId={`${uid}-expenses`} />
-      </ChartCard>
-      <ChartCard title="401k Balance" height={260}>
-        <SingleAreaChart data={data} dataKey="401k Balance" color="#0d9488" gradId={`${uid}-balance`} />
-      </ChartCard>
-      <ChartCard title="401k Withdrawal" height={260}>
-        <SingleAreaChart data={data} dataKey="401k Withdrawal" color="#16a34a" gradId={`${uid}-withdrawal`} />
-      </ChartCard>
-      <ChartCard title="Social Security" height={260}>
-        <SingleAreaChart data={data} dataKey="Social Security" color="#0891b2" gradId={`${uid}-ss`} />
-      </ChartCard>
-      <ChartCard title="Surplus / Deficit" height={260}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-            <AreaGradientDefs
-              defs={[
-                { id: surplusGradId, color: SURPLUS_COLOR },
-                { id: deficitGradId, color: DEFICIT_COLOR },
-              ]}
-            />
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="age" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 11 }} width={52} />
-            <Tooltip formatter={(v) => formatFullCurrency(Number(v))} labelFormatter={(age) => `Age ${age}`} />
-            <ReferenceLine y={0} stroke="var(--border)" />
-            <Area type="monotone" dataKey="Surplus" stroke={SURPLUS_COLOR} strokeWidth={2} fill={`url(#${surplusGradId})`} dot={false} />
-            <Area type="monotone" dataKey="Deficit" stroke={DEFICIT_COLOR} strokeWidth={2} fill={`url(#${deficitGradId})`} dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-    </ChartGrid>
+    <div>
+      <div className="field" style={{ maxWidth: 280, marginBottom: "1rem" }}>
+        <label htmlFor={`${uid}-chart-select`}>Chart</label>
+        <select id={`${uid}-chart-select`} value={activeChart} onChange={(e) => setActiveChart(e.target.value as ChartKey)}>
+          {CHART_ORDER.map(({ key, label }) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {activeChart === "surplus" ? (
+        <ChartCard title="Surplus / Deficit" subtitle="Total income minus total expenses — negative means expenses win that year." height={320}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <AreaGradientDefs
+                defs={[
+                  { id: surplusGradId, color: SURPLUS_COLOR },
+                  { id: deficitGradId, color: DEFICIT_COLOR },
+                ]}
+              />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+              <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 11 }} width={52} />
+              <Tooltip formatter={(v) => formatFullCurrency(Number(v))} labelFormatter={(age) => `Age ${age}`} />
+              <ReferenceLine y={0} stroke="var(--border)" />
+              <Area type="monotone" dataKey="Surplus" stroke={SURPLUS_COLOR} strokeWidth={2} fill={`url(#${surplusGradId})`} dot={false} />
+              <Area type="monotone" dataKey="Deficit" stroke={DEFICIT_COLOR} strokeWidth={2} fill={`url(#${deficitGradId})`} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      ) : (
+        (() => {
+          const meta = SIMPLE_CHART_META[activeChart];
+          return (
+            <ChartCard title={meta.label} subtitle={meta.subtitle} height={320}>
+              <SingleAreaChart data={data} dataKey={meta.dataKey} color={meta.color} gradId={`${uid}-${activeChart}`} />
+            </ChartCard>
+          );
+        })()
+      )}
+    </div>
   );
 }

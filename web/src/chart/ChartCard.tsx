@@ -7,16 +7,26 @@ import type { ReactNode } from "react";
  * appears. */
 export function ChartCard({
   title,
+  subtitle,
   height = 300,
   children,
 }: {
   title: string;
+  /** A one-line description of what the chart shows — most useful once a
+   * page only shows one chart at a time (a tab or dropdown selection),
+   * where the title alone no longer has neighboring charts for context. */
+  subtitle?: string;
   height?: number;
   children: ReactNode;
 }) {
   return (
     <div className="card" style={{ minWidth: 0 }}>
-      <h4 style={{ margin: "0 0 0.75rem" }}>{title}</h4>
+      <h4 style={{ margin: subtitle ? "0 0 0.15rem" : "0 0 0.75rem" }}>{title}</h4>
+      {subtitle && (
+        <p className="caption" style={{ margin: "0 0 0.75rem" }}>
+          {subtitle}
+        </p>
+      )}
       <div style={{ width: "100%", height }}>{children}</div>
     </div>
   );

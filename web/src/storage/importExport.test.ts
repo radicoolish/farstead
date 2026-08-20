@@ -33,14 +33,16 @@ const expense: Expense = {
   inflationRate: 3,
 };
 
+const withdrawalRate = { mode: "percent" as const, percent: 4, dollar: 40000 };
+
 describe("buildExportPayload / validateImportPayload round trip", () => {
   it("a freshly built export payload always validates", () => {
-    const payload = buildExportPayload([person], [expense], 36, 4);
+    const payload = buildExportPayload([person], [expense], 36, withdrawalRate);
     expect(validateImportPayload(payload)).toBeNull();
   });
 
   it("an empty household still validates", () => {
-    expect(validateImportPayload(buildExportPayload([], [], 35, 4))).toBeNull();
+    expect(validateImportPayload(buildExportPayload([], [], 35, withdrawalRate))).toBeNull();
   });
 });
 
