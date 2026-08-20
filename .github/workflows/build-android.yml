@@ -1,0 +1,81 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "web/**"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager --install "ndk;27.2.12479018"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: web
+        run: npm ci
+
+      - name: Init Android project
+        working-directory: web
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: npx tauri android init --ci
+
+      - name: Build release APK
+        working-directory: web
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: npx tauri android build --ci --apk -t aarch64
+
+      - name: Generate signing key
+        run: |
+          keytool -genkeypair -dname "cn=James Gibson, ou=Farstead, o=Farstead, c=US" \
+            -alias android -keypass "FarsteadTWA2026!" -keystore android.keystore \
+            -storepass "FarsteadTWA2026!" -validity 20000 -keyalg RSA
+
+      - name: Find, align, and sign APK
+        run: |
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)"
+          UNSIGNED_APK=$(find web/src-tauri/gen/android -iname "*.apk" | head -1)
+          echo "Found unsigned APK: $UNSIGNED_APK"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED_APK" app-release-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks android.keystore --ks-key-alias android \
+            --ks-pass pass:FarsteadTWA2026! --key-pass pass:FarsteadTWA2026! \
+            --out farstead-native-release-signed.apk app-release-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify farstead-native-release-signed.apk
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          name: Farstead Android build ${{ github.run_number }}
+          make_latest: true
+          files: farstead-native-release-signed.apk
