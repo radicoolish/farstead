@@ -75,6 +75,15 @@ export function IconSummary({ className }: IconProps) {
   );
 }
 
+export function IconFlag({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M5.25 2.25v15.5" />
+      <path d="M5.25 3.5c2.4-1.3 4.1-1.3 6.5 0s4.1 1.3 6.5 0v8c-2.4 1.3-4.1 1.3-6.5 0s-4.1-1.3-6.5 0z" />
+    </svg>
+  );
+}
+
 export function IconClose({ className }: IconProps) {
   return (
     <svg className={className} {...base}>

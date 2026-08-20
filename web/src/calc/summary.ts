@@ -1,5 +1,6 @@
 import type { ByAge, Expense, Person, PersonOverrides, WithdrawalRate } from "./types";
 import { EXPENSE_HORIZON_AGE } from "./types";
+import { calculateAge } from "./age";
 import { projectBalance, projectHouseholdNetIncomeByAge, projectHouseholdSocialSecurityByAge, projectHouseholdWithdrawalIncomeByAge } from "./projection";
 import { projectHouseholdTotalExpensesByAge } from "./expenses";
 
@@ -99,4 +100,60 @@ export function computeSimulatorComparisonMetrics(
   const yearsOfDraw = lastsFullHorizon ? EXPENSE_HORIZON_AGE - boundaryAge : deficitAge - boundaryAge;
 
   return { combinedBalanceAtRetirement, yearsOfDraw, lastsFullHorizon };
+}
+
+/** Oldest age a retirement search bothers trying. Capped at
+ * EXPENSE_HORIZON_AGE itself, not the 100 the Retirement Age sliders allow
+ * elsewhere: past the horizon age, `computeSimulatorComparisonMetrics`'s
+ * deficit-search window (boundaryAge..EXPENSE_HORIZON_AGE) becomes empty,
+ * which makes `lastsFullHorizon` trivially true — a degenerate "you can
+ * retire at 95!" answer with zero actual retirement years evaluated. */
+const MAX_SEARCHABLE_RETIREMENT_AGE = EXPENSE_HORIZON_AGE;
+
+export interface EarliestRetirementResult {
+  /** The earliest age (from this person's current age through
+   * MAX_SEARCHABLE_RETIREMENT_AGE) at which retiring still leaves income
+   * covering expenses all the way through EXPENSE_HORIZON_AGE — null if
+   * not achievable at any age in that range under current assumptions. */
+  earliestAge: number | null;
+  /** This person's own saved retirement age, for comparison. */
+  currentPlanAge: number;
+  /** currentPlanAge - earliestAge — positive means they could retire that
+   * many years earlier than currently planned; negative means their
+   * current plan is already earlier than what's actually sustainable.
+   * Null when earliestAge is null. */
+  yearsEarlier: number | null;
+}
+
+/** "When can I retire?" for one person — holds every other person's
+ * (and this person's own every-other-field's) actual saved settings
+ * fixed, and finds the earliest retirement age for just this person that
+ * still keeps the household's income covering its expenses through
+ * EXPENSE_HORIZON_AGE. A linear scan rather than a binary search: the
+ * search range tops out around 60-70 candidate ages, cheap either way,
+ * and a scan doesn't depend on proving the underlying relationship is
+ * strictly monotonic (retiring later should only ever help — more
+ * contribution/growth years, a shorter withdrawal period — but a scan
+ * finds the right answer even if some edge case wobbles that). */
+export function findEarliestRetirementAge(
+  people: Person[],
+  expenses: Expense[],
+  currentAge: number,
+  withdrawalRate: WithdrawalRate,
+  personId: string,
+  today: Date = new Date(),
+): EarliestRetirementResult {
+  const person = people.find((p) => p.id === personId);
+  if (!person) return { earliestAge: null, currentPlanAge: 0, yearsEarlier: null };
+
+  const personAge = calculateAge(person.birthday, today);
+  const minAge = Math.max(personAge, 1);
+
+  for (let age = minAge; age <= MAX_SEARCHABLE_RETIREMENT_AGE; age++) {
+    const metrics = computeSimulatorComparisonMetrics(people, expenses, currentAge, withdrawalRate, { [personId]: { retirementAge: age } }, today);
+    if (metrics.lastsFullHorizon) {
+      return { earliestAge: age, currentPlanAge: person.retirementAge, yearsEarlier: person.retirementAge - age };
+    }
+  }
+  return { earliestAge: null, currentPlanAge: person.retirementAge, yearsEarlier: null };
 }

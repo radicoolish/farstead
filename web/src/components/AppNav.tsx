@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import { useAppData } from "../state/AppDataContext";
 import { useTheme, type ThemeMode } from "../state/ThemeContext";
 import type { SectionKey } from "../sections";
-import { IconData, IconExpenses, IconGrowth, IconIncome, IconMoon, IconSimulator, IconSummary, IconSun, IconSystem } from "./icons";
+import { IconData, IconExpenses, IconFlag, IconGrowth, IconIncome, IconMoon, IconSimulator, IconSummary, IconSun, IconSystem } from "./icons";
 
 const THEME_ORDER: ThemeMode[] = ["light", "dark", "system"];
 const THEME_META: Record<ThemeMode, { label: string; Icon: ComponentType<{ className?: string }> }> = {
@@ -19,13 +19,16 @@ export const SECTION_META: Record<SectionKey, { label: string; Icon: ComponentTy
   expenses: { label: "Expenses", Icon: IconExpenses },
   summary: { label: "Summary", Icon: IconSummary },
   simulator: { label: "Simulator", Icon: IconSimulator },
+  retire: { label: "When Can I Retire?", Icon: IconFlag },
 };
 
 /** Canonical section order — shared with StepFooter so the "Continue" /
  * "Back" buttons walk the same sequence the tabs are laid out in. Summary
  * sits after Expenses (the last data-entry step) as a recap of everything
- * entered so far, before moving on to the free-form Simulator. */
-export const SECTION_ORDER: SectionKey[] = ["income", "401k", "expenses", "summary", "simulator"];
+ * entered so far, before moving on to the free-form Simulator. When Can I
+ * Retire comes last — it's a headline answer built on top of everything
+ * else, not another data-entry step. */
+export const SECTION_ORDER: SectionKey[] = ["income", "401k", "expenses", "summary", "simulator", "retire"];
 
 /** Sticky top nav: one tab per section (click to switch — no forced order,
  * since revisiting an earlier section while tuning a later one is normal

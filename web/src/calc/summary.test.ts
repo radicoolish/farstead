@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { averageOverRange, computeSimulatorComparisonMetrics, firstDeficitAgeFrom, householdRetirementBoundaryAge } from "./summary";
+import {
+  averageOverRange,
+  computeSimulatorComparisonMetrics,
+  findEarliestRetirementAge,
+  firstDeficitAgeFrom,
+  householdRetirementBoundaryAge,
+} from "./summary";
 import type { Expense, Person } from "./types";
 
 function makePerson(overrides: Partial<Person> = {}): Person {
@@ -205,5 +211,104 @@ describe("computeSimulatorComparisonMetrics", () => {
     const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, { mode: "dollar", value: 10000 }, {}, TODAY);
     expect(metrics.lastsFullHorizon).toBe(false);
     expect(metrics.yearsOfDraw).toBe(3);
+  });
+});
+
+describe("findEarliestRetirementAge", () => {
+  const TODAY = new Date(2026, 7, 16); // 2026-08-16, matches projection.test.ts's convention
+
+  it("returns a null-safe result for an unknown person id", () => {
+    const alice = makePerson({ id: "alice" });
+    const result = findEarliestRetirementAge([alice], [], 40, { mode: "percent", value: 4 }, "nobody", TODAY);
+    expect(result).toEqual({ earliestAge: null, currentPlanAge: 0, yearsEarlier: null });
+  });
+
+  it("finds the person's current age itself when retiring today already covers expenses", () => {
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01", // age 40 at TODAY
+      retirementAge: 40,
+      currentBalance: 0,
+      socialSecurityClaimAge: 40,
+      socialSecurityMonthly: 5000,
+    });
+    const expenses = [makeExpense({ monthlyAmount: 500 })];
+    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
+    expect(result.earliestAge).toBe(40);
+    expect(result.currentPlanAge).toBe(40);
+    expect(result.yearsEarlier).toBe(0);
+  });
+
+  it("returns null when no age through the horizon achieves a sustainable retirement", () => {
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01",
+      currentBalance: 0,
+      growthRatePct: 0,
+      contributionPct: 0,
+      matchPct: 0,
+      salaryIncreasePct: 0, // flat $100k salary, net ~$80k/yr after 20% tax
+      socialSecurityMonthly: 0,
+    });
+    // $200k/yr expenses dwarf even Alice's peak earned income, so every
+    // candidate retirement age (including the boundary age itself, where
+    // earned income still counts for that one year) shows a deficit.
+    const expenses = [makeExpense({ monthlyAmount: 200000 / 12 })];
+    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
+    expect(result.earliestAge).toBeNull();
+    expect(result.yearsEarlier).toBeNull();
+  });
+
+  it("finds the exact earliest age a fixed-dollar withdrawal can sustain expenses through the horizon", () => {
+    // growthRatePct 0 and matchPct 0 keep the balance trajectory exactly
+    // linear: contributing 10% of a flat $100k salary each year Alice works
+    // adds exactly $10,000/year to her balance, so her balance at
+    // retirement age R is exactly 10000 * (R - 40).
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01", // age 40 at TODAY
+      retirementAge: 65, // her own saved plan, for comparison
+      currentBalance: 0,
+      currentSalary: 100000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    // $4000/yr recurring expenses against a fixed $5000/yr withdrawal:
+    // - Retiring at 55 leaves a balance of 10000*(55-40) = $150,000, which
+    //   funds exactly 30 full $5000 withdrawals (ages 56-85) with $0 left
+    //   over — covers every year through the horizon.
+    // - Retiring at 54 leaves only $140,000, which funds 28 full
+    //   withdrawals then runs dry partway through age 83, leaving that
+    //   year's withdrawal short of the $4000 expense.
+    const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
+    const result = findEarliestRetirementAge([alice], expenses, 40, { mode: "dollar", value: 5000 }, "alice", TODAY);
+    expect(result.earliestAge).toBe(55);
+    expect(result.currentPlanAge).toBe(65);
+    expect(result.yearsEarlier).toBe(10);
+  });
+
+  it("holds other household members' settings fixed while searching one person's age", () => {
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01", // age 40 at TODAY
+      retirementAge: 40,
+      currentBalance: 0,
+      socialSecurityClaimAge: 40,
+      socialSecurityMonthly: 5000, // covers expenses alone, regardless of bob
+    });
+    const bob = makePerson({
+      id: "bob",
+      birthday: "1986-01-01",
+      retirementAge: 70, // bob's own saved plan is untouched by alice's search
+      currentBalance: 0,
+      socialSecurityMonthly: 0,
+    });
+    const expenses = [makeExpense({ monthlyAmount: 500 })];
+    const result = findEarliestRetirementAge([alice, bob], expenses, 40, { mode: "percent", value: 4 }, "alice", TODAY);
+    expect(result.earliestAge).toBe(40);
+    expect(result.currentPlanAge).toBe(40);
   });
 });

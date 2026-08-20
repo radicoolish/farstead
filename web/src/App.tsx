@@ -11,6 +11,7 @@ import { FourZeroOneKSection } from "./components/FourZeroOneKSection";
 import { ExpensesSection } from "./components/ExpensesSection";
 import { SummarySection } from "./components/SummarySection";
 import { SimulatorSection } from "./components/SimulatorSection";
+import { WhenCanIRetireSection } from "./components/WhenCanIRetireSection";
 import { IconData } from "./components/icons";
 import { loadFromStorage, saveToStorage, WELCOME_SEEN_KEY } from "./storage/localStorage";
 import type { SectionKey } from "./sections";
@@ -21,6 +22,7 @@ const SECTION_COMPONENTS: Record<SectionKey, ComponentType> = {
   expenses: ExpensesSection,
   summary: SummarySection,
   simulator: SimulatorSection,
+  retire: WhenCanIRetireSection,
 };
 
 function App() {
