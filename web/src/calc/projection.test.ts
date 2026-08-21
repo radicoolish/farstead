@@ -129,27 +129,71 @@ describe("projectHouseholdWithdrawalIncomeByAge", () => {
     // given person's own age trigger (retirementAge here) when the two
     // start in sync, exactly like the app's "Current Age (for projection)"
     // input defaults to the first person's real age.
+    // Person retires at 65 (accountType Pre-tax, taxRatePct 20) — every
+    // withdrawal year here is age 66+, past the early-withdrawal penalty
+    // threshold, so only the 20% tax applies: net = gross * 0.8.
     const person = makePerson();
     const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
     expect(totals.get(65)).toBe(0); // retirement year itself: no withdrawal yet
-    expect(totals.get(66)).toBeCloseTo(38834.45, 1);
-    expect(totals.get(67)).toBeCloseTo(39517.94, 1);
-    expect(totals.get(68)).toBeCloseTo(40213.46, 1);
+    expect(totals.get(66)).toBeCloseTo(38834.45 * 0.8, 1);
+    expect(totals.get(67)).toBeCloseTo(39517.94 * 0.8, 1);
+    expect(totals.get(68)).toBeCloseTo(40213.46 * 0.8, 1);
   });
 
   it("in dollar mode, withdraws the fixed amount and clamps once the balance runs out", () => {
     // Retires immediately (retirementAge === current age) so the starting
     // balance is exactly currentBalance, with 0% growth so depletion is
     // pure subtraction — easy to hand-verify, and demonstrates the one
-    // thing percent mode structurally can't: actually hitting zero.
+    // thing percent mode structurally can't: actually hitting zero. Every
+    // withdrawal year here is under 60 (accountType Pre-tax, taxRatePct
+    // 20), so both the 20% tax and the 10% early-withdrawal penalty apply:
+    // net = gross * 0.7.
     const person = makePerson({ retirementAge: 40, currentBalance: 10000, growthRatePct: 0 });
     const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 45, { mode: "dollar", value: 3000 }, {}, TODAY);
     expect(totals.get(40)).toBe(0); // retirement year itself: no withdrawal yet
-    expect(totals.get(41)).toBeCloseTo(3000, 2); // 10000 -> 7000
-    expect(totals.get(42)).toBeCloseTo(3000, 2); // 7000 -> 4000
-    expect(totals.get(43)).toBeCloseTo(3000, 2); // 4000 -> 1000
-    expect(totals.get(44)).toBeCloseTo(1000, 2); // clamped: only 1000 left
+    expect(totals.get(41)).toBeCloseTo(3000 * 0.7, 2); // gross 10000 -> 7000
+    expect(totals.get(42)).toBeCloseTo(3000 * 0.7, 2); // gross 7000 -> 4000
+    expect(totals.get(43)).toBeCloseTo(3000 * 0.7, 2); // gross 4000 -> 1000
+    expect(totals.get(44)).toBeCloseTo(1000 * 0.7, 2); // clamped: only 1000 left
     expect(totals.get(45)).toBe(0); // balance fully depleted — stays 0, not negative
+  });
+});
+
+describe("projectHouseholdWithdrawalIncomeByAge — tax and early-withdrawal penalty", () => {
+  it("Pre-tax: taxes the withdrawal and adds the 10% penalty before age 60", () => {
+    const person = makePerson({
+      retirementAge: 40, // withdrawal starts at 41 — well under 60
+      currentBalance: 1_000_000, // large enough that the withdrawal never clamps
+      growthRatePct: 0,
+      taxRatePct: 25,
+      accountType: "Pre-tax",
+    });
+    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 41, { mode: "dollar", value: 10000 }, {}, TODAY);
+    expect(totals.get(41)).toBeCloseTo(10000 * (1 - 0.25 - 0.1), 2); // tax + penalty
+  });
+
+  it("Pre-tax: drops the penalty (keeps the tax) once withdrawals start at exactly 60", () => {
+    const person = makePerson({
+      retirementAge: 59, // withdrawal starts at exactly age 60 — no penalty
+      currentBalance: 1_000_000,
+      growthRatePct: 0,
+      taxRatePct: 25,
+      accountType: "Pre-tax",
+    });
+    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 60, { mode: "dollar", value: 10000 }, {}, TODAY);
+    expect(totals.get(60)).toBeCloseTo(10000 * (1 - 0.25), 2); // tax only
+  });
+
+  it("Roth: no tax and no penalty, even before age 60", () => {
+    const person = makePerson({
+      retirementAge: 40,
+      currentBalance: 1_000_000,
+      growthRatePct: 0,
+      taxRatePct: 25,
+      accountType: "Roth",
+    });
+    const totals = projectHouseholdWithdrawalIncomeByAge([person], 40, 41, { mode: "dollar", value: 10000 }, {}, TODAY);
+    expect(totals.get(41)).toBeCloseTo(10000, 2); // full gross — Roth is modeled tax/penalty-free
   });
 });
 
@@ -223,12 +267,14 @@ describe("projectHouseholdBalanceByAge", () => {
     const person = makePerson();
     const balances = projectHouseholdBalanceByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
     const withdrawals = projectHouseholdWithdrawalIncomeByAge([person], 40, 68, { mode: "percent", value: 4 }, {}, TODAY);
-    // The withdrawal taken at each age is exactly 4% of the balance this
+    // The withdrawal *taken* at each age is exactly 4% of the balance this
     // function reports for the *previous* age — the two functions share
-    // the same underlying depletion mechanics, just exposing different
-    // parts of it.
-    expect(balances.get(66)! * 0.04).toBeCloseTo(withdrawals.get(67)!, 1);
-    expect(balances.get(67)! * 0.04).toBeCloseTo(withdrawals.get(68)!, 1);
+    // the same underlying (gross) depletion mechanics, just exposing
+    // different parts of it. What lands in the withdrawal-income total is
+    // net of the person's 20% tax rate (ages 66+ are past the early-
+    // withdrawal penalty threshold, so no penalty here).
+    expect(balances.get(66)! * 0.04 * 0.8).toBeCloseTo(withdrawals.get(67)!, 1);
+    expect(balances.get(67)! * 0.04 * 0.8).toBeCloseTo(withdrawals.get(68)!, 1);
   });
 
   it("in dollar mode, the balance itself reaches exactly zero and stays there", () => {

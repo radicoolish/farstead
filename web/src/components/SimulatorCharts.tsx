@@ -29,7 +29,7 @@ const CHART_META: Record<ChartKey, { label: string; title: string; subtitle: str
   withdrawal: {
     label: "401(k) Withdrawal",
     title: "401k Withdrawal",
-    subtitle: "Income from 401(k) withdrawals, actual vs. simulated.",
+    subtitle: "After-tax income from 401(k) withdrawals (net of tax and any early-withdrawal penalty), actual vs. simulated.",
     color: "#16a34a",
   },
   socialSecurity: {

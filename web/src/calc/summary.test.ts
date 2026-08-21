@@ -201,13 +201,16 @@ describe("computeSimulatorComparisonMetrics", () => {
       id: "alice",
       birthday: "1966-01-01",
       retirementAge: 60,
-      currentBalance: 20000,
+      currentBalance: 25000,
       growthRatePct: 0,
       socialSecurityMonthly: 0,
     });
-    // $10k/yr withdrawal covers the $9k/yr expenses for 2 years (age 61,
-    // 62), then the $20k balance is exhausted and age 63 goes into deficit.
-    const expenses = [makeExpense({ monthlyAmount: 750 })];
+    // $10k/yr gross withdrawal, taxed at Alice's 20% rate (every withdrawal
+    // year here is 61+, past the early-withdrawal penalty threshold) nets
+    // $8k/yr — covers the $6k/yr expenses for 2 years (age 61, 62), then
+    // the $25k balance is exhausted, the year-3 withdrawal clamps to the
+    // $5k remaining (nets $4k), and age 63 goes into deficit.
+    const expenses = [makeExpense({ monthlyAmount: 500 })];
     const metrics = computeSimulatorComparisonMetrics([alice], expenses, 60, { mode: "dollar", value: 10000 }, {}, TODAY);
     expect(metrics.lastsFullHorizon).toBe(false);
     expect(metrics.yearsOfDraw).toBe(3);
@@ -238,16 +241,19 @@ describe("findEarliestHouseholdRetirement", () => {
       growthRatePct: 0,
       socialSecurityMonthly: 0,
     });
-    // $4000/yr expenses against a fixed $5000/yr withdrawal: yearsOut=15
-    // (age 55) leaves $150,000, funding exactly 30 full withdrawals (the
-    // 45 - 15 remaining modeled years) with $0 left over; yearsOut=14
-    // leaves only $140,000, which runs dry one year short.
+    // $5000/yr gross withdrawal, taxed at Alice's 20% rate, nets $4000 —
+    // exactly the $4000/yr expense — *only* once withdrawals start at age
+    // 60+ (no early-withdrawal penalty); below 60 the extra 10% penalty
+    // drops net to $3500, permanently under the $4000 expense regardless
+    // of balance size. So the binding constraint here is age, not balance:
+    // yearsOut=19 (retiring at 59) is the earliest where the *first*
+    // withdrawal year (age 60) — and every year after — clears the bar.
     const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
     const result = findEarliestHouseholdRetirement([alice], expenses, 40, { mode: "dollar", value: 5000 }, {}, TODAY);
-    expect(result.earliestYearsOut).toBe(15);
-    expect(result.resultingAgeByPersonId).toEqual({ alice: 55 });
+    expect(result.earliestYearsOut).toBe(19);
+    expect(result.resultingAgeByPersonId).toEqual({ alice: 59 });
     expect(result.plannedYearsOut).toBe(25); // 65 - 40
-    expect(result.yearsEarlier).toBe(10);
+    expect(result.yearsEarlier).toBe(6);
   });
 
   it("finds the earliest year two differently-aged people can retire together", () => {
@@ -296,11 +302,18 @@ describe("findEarliestHouseholdRetirement", () => {
   });
 
   it("applies a per-person scenario override on top of their saved settings", () => {
-    // Same Alice as the single-person case, but with a scenario that
-    // starts her off with a $75,000 head start. Balance at yearsOut Y is
-    // now 75000 + 10000Y; sustainable once that covers (45-Y) years of
-    // $5,000 withdrawals: 75000+10000Y >= 5000(45-Y) -> Y >= 10 exactly
-    // (175,000 covers 35 remaining years of $5,000 exactly).
+    // Same Alice, but withdrawing $8000/yr gross against the same
+    // $4000/yr expense — even taxed-and-penalized (0.7x) that nets
+    // $5600, comfortably above the expense at any age, so *this* pairing
+    // is purely balance-constrained (no age floor to fight), letting a
+    // balance-boosting scenario override actually move the result.
+    //
+    // With no override: balance at yearsOut Y is 10000Y, sustainable once
+    // it covers (45-Y) years of $8000 withdrawals: 10000Y >= 8000(45-Y)
+    // -> Y >= 20 exactly (200,000 covers 25 remaining years of $8000
+    // exactly). A scenario starting Alice off with an $18,000 head start
+    // (balance 18000 + 10000Y) shifts that exact boundary to Y = 19
+    // instead (208,000 covers the 26 remaining years exactly).
     const alice = makePerson({
       id: "alice",
       birthday: "1986-01-01",
@@ -318,14 +331,14 @@ describe("findEarliestHouseholdRetirement", () => {
       [alice],
       expenses,
       40,
-      { mode: "dollar", value: 5000 },
-      { alice: { currentBalance: 75000 } },
+      { mode: "dollar", value: 8000 },
+      { alice: { currentBalance: 18000 } },
       TODAY,
     );
-    expect(result.earliestYearsOut).toBe(10);
-    expect(result.resultingAgeByPersonId).toEqual({ alice: 50 });
+    expect(result.earliestYearsOut).toBe(19);
+    expect(result.resultingAgeByPersonId).toEqual({ alice: 59 });
     expect(result.plannedYearsOut).toBe(25); // scenario didn't touch retirementAge
-    expect(result.yearsEarlier).toBe(15);
+    expect(result.yearsEarlier).toBe(6);
   });
 
   it("returns null when no shared retirement year is sustainable through the horizon", () => {

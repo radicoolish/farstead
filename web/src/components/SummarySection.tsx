@@ -162,7 +162,7 @@ export function SummarySection() {
         <StatTile
           label="Combined 401(k) Withdrawal"
           value={`${formatCompactCurrency(avgWithdrawal)}/yr`}
-          help={`401(k) withdrawal income${periodSuffix}`}
+          help={`After-tax 401(k) withdrawal income — net of income tax, plus the 10% early-withdrawal penalty before age 60${periodSuffix}`}
         />
         <StatTile
           label="Combined Social Security"

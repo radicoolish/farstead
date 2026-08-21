@@ -1,13 +1,41 @@
 import { calculateAge } from "./age";
 import { DEFAULT_MARKET_CONDITION_DURATION_YEARS, effectiveGrowthRateForYear, MARKET_CONDITIONS } from "./marketConditions";
-import type { BalancePoint, ByAge, IncomeChange, Person, PersonOverrides, WithdrawalRate } from "./types";
+import type { AccountType, BalancePoint, ByAge, IncomeChange, Person, PersonOverrides, WithdrawalRate } from "./types";
 
 /** One year's withdrawal from a single balance — a percentage of that
  * balance, or a fixed dollar amount clamped to what's actually left (so a
- * fixed withdrawal can't take the balance negative once it runs out). */
+ * fixed withdrawal can't take the balance negative once it runs out). This
+ * is the *gross* amount — what actually leaves the 401(k) balance itself;
+ * see `netWithdrawal` for what's left to spend after tax and any early-
+ * withdrawal penalty. */
 function withdrawalAmountForYear(rate: WithdrawalRate, balance: number): number {
   if (rate.mode === "percent") return balance * (rate.value / 100);
   return Math.min(rate.value, Math.max(0, balance));
+}
+
+/** Real IRS early-withdrawal penalty age is 59½; this app only tracks
+ * whole-year ages, so 60 is the closest faithful whole-year stand-in (a
+ * withdrawal at age 59 is flagged even though someone born early in the
+ * year may already be past 59½ by then — erring toward showing the
+ * penalty rather than silently hiding a real cost). */
+const EARLY_WITHDRAWAL_PENALTY_AGE = 60;
+const EARLY_WITHDRAWAL_PENALTY_RATE = 0.1;
+
+/** What's actually spendable from a gross 401(k) withdrawal, after income
+ * tax and (if withdrawn before EARLY_WITHDRAWAL_PENALTY_AGE) the 10%
+ * federal early-withdrawal penalty. Pre-tax only — Roth withdrawals are
+ * modeled as fully tax- and penalty-free, since this app has no way to
+ * track contribution-vs-earnings basis and so can't model the narrower
+ * real rule that only Roth *earnings* face an early penalty. The gross
+ * amount is still what depletes the 401(k) balance (see
+ * `projectHouseholdBalanceByAge`) — tax and penalty come out of the
+ * withdrawn cash on the way to the retiree, not as a second hit to the
+ * account. */
+function netWithdrawal(gross: number, accountType: AccountType, taxRatePct: number, ageThisYear: number): number {
+  if (accountType === "Roth" || gross <= 0) return gross;
+  const tax = gross * (taxRatePct / 100);
+  const penalty = ageThisYear < EARLY_WITHDRAWAL_PENALTY_AGE ? gross * EARLY_WITHDRAWAL_PENALTY_RATE : 0;
+  return Math.max(0, gross - tax - penalty);
 }
 
 function round2(value: number): number {
@@ -133,13 +161,17 @@ export function projectHouseholdNetIncomeByAge(
   return totals;
 }
 
-/** 401(k) withdrawal income by household reference age, summed across
+/** 401(k) withdrawal *income* by household reference age, summed across
  * everyone, starting the year after each person's own earned income stops.
- * Each year's withdrawal is either a percentage of that person's 401(k)
- * balance at the start of the year, or a fixed dollar amount (see
+ * Each year's gross withdrawal is either a percentage of that person's
+ * 401(k) balance at the start of the year, or a fixed dollar amount (see
  * `WithdrawalRate`) — the balance used (the chosen scenario's, or with no
- * override the base) is its projection through retirement; the remainder
- * compounds at their own growth rate for next year. */
+ * override the base) is its projection through retirement, and depletes by
+ * the *gross* withdrawal each year (matching `projectHouseholdBalanceByAge`).
+ * What's added to this function's income totals is the *net* amount after
+ * tax and any early-withdrawal penalty (see `netWithdrawal`) — the actual
+ * spendable cash, consistent with earned income already being take-home
+ * pay rather than gross salary. */
 export function projectHouseholdWithdrawalIncomeByAge(
   people: Person[],
   currentAge: number,
@@ -165,7 +197,7 @@ export function projectHouseholdWithdrawalIncomeByAge(
     for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
       if (personAge + i <= retirementAge) continue;
       const withdrawal = withdrawalAmountForYear(withdrawalRate, balance);
-      addTo(totals, age, withdrawal);
+      addTo(totals, age, netWithdrawal(withdrawal, effective.accountType, effective.taxRatePct, personAge + i));
       const yearGrowthRate = effectiveGrowthRateForYear(
         growthRate,
         marketCondition,

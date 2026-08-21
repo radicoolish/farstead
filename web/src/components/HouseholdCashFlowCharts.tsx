@@ -57,7 +57,7 @@ const SIMPLE_CHART_META: Record<Exclude<ChartKey, "surplus">, { label: string; d
   withdrawal: {
     label: "401(k) Withdrawal",
     dataKey: "401k Withdrawal",
-    subtitle: "Income from 401(k) withdrawals, once earned income stops.",
+    subtitle: "After-tax income from 401(k) withdrawals, once earned income stops — net of income tax, plus the 10% early-withdrawal penalty before age 60.",
     color: "#16a34a",
   },
   socialSecurity: {
