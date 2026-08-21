@@ -38,6 +38,9 @@ export interface PersonOverrides {
   taxRatePct?: number;
   socialSecurityClaimAge?: number;
   socialSecurityMonthly?: number;
+  savingsBalance?: number;
+  savingsGrowthRatePct?: number;
+  savingsContributionMonthly?: number;
   incomeChange?: IncomeChange;
   /** Simulator-only — not settable via the saved-scenario builder. See
    * marketConditions.ts. `marketConditionStartAge` defaults to the
@@ -78,6 +81,13 @@ export interface Person {
   taxRatePct: number;
   socialSecurityClaimAge: number;
   socialSecurityMonthly: number;
+  /** A general (non-401(k)) savings balance — cash, brokerage, HYSA, etc.
+   * Grows at its own rate, fed by a monthly contribution while working,
+   * and unlike the 401(k) carries no early-withdrawal penalty or special
+   * tax treatment when drawn on (see projectHouseholdSavingsDrawdownByAge). */
+  savingsBalance: number;
+  savingsGrowthRatePct: number;
+  savingsContributionMonthly: number;
   scenarios: Scenario[];
 }
 

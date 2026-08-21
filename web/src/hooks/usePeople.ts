@@ -21,6 +21,9 @@ function normalizePerson(person: Partial<Person> & Pick<Person, "id" | "name" | 
     taxRatePct: 22,
     socialSecurityClaimAge: 67,
     socialSecurityMonthly: 0,
+    savingsBalance: 0,
+    savingsGrowthRatePct: 4,
+    savingsContributionMonthly: 0,
     scenarios: [],
     ...person,
   };

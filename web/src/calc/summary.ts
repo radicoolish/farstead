@@ -1,7 +1,13 @@
 import type { ByAge, Expense, Person, PersonOverrides, WithdrawalRate } from "./types";
 import { EXPENSE_HORIZON_AGE } from "./types";
 import { calculateAge } from "./age";
-import { projectBalance, projectHouseholdNetIncomeByAge, projectHouseholdSocialSecurityByAge, projectHouseholdWithdrawalIncomeByAge } from "./projection";
+import {
+  projectBalance,
+  projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
+  projectHouseholdSocialSecurityByAge,
+  projectHouseholdWithdrawalIncomeByAge,
+} from "./projection";
 import { projectHouseholdTotalExpensesByAge } from "./expenses";
 
 /** The age the household's retirement period starts at — the earliest
@@ -39,20 +45,26 @@ export function averageOverRange(byAge: ByAge, startAge: number, endAge: number)
 }
 
 /** The first age, searching from `startAge` through `endAge`, at which
- * combined income (earned + 401(k) withdrawal + Social Security) falls
- * short of expenses — null if it never does in that range. Same "first
- * deficit" concept the Summary tab surfaces (relative to today), just
- * reusable from any starting age. */
+ * combined income (earned + 401(k) withdrawal + Social Security + general
+ * savings drawdown) falls short of expenses — null if it never does in
+ * that range. Same "first deficit" concept the Summary tab surfaces
+ * (relative to today), just reusable from any starting age. */
 export function firstDeficitAgeFrom(
   incomeByAge: ByAge,
   withdrawalByAge: ByAge,
   ssByAge: ByAge,
+  savingsByAge: ByAge,
   expensesByAge: ByAge,
   startAge: number,
   endAge: number,
 ): number | null {
   for (let age = startAge; age <= endAge; age++) {
-    const net = (incomeByAge.get(age) ?? 0) + (withdrawalByAge.get(age) ?? 0) + (ssByAge.get(age) ?? 0) - (expensesByAge.get(age) ?? 0);
+    const net =
+      (incomeByAge.get(age) ?? 0) +
+      (withdrawalByAge.get(age) ?? 0) +
+      (ssByAge.get(age) ?? 0) +
+      (savingsByAge.get(age) ?? 0) -
+      (expensesByAge.get(age) ?? 0);
     if (net < 0) return age;
   }
   return null;
@@ -94,8 +106,19 @@ export function computeSimulatorComparisonMetrics(
   const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRate, overridesByPersonId, today);
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
+  const savingsByAge = projectHouseholdSavingsDrawdownByAge(
+    people,
+    currentAge,
+    EXPENSE_HORIZON_AGE,
+    incomeByAge,
+    withdrawalByAge,
+    ssByAge,
+    expensesByAge,
+    overridesByPersonId,
+    today,
+  );
 
-  const deficitAge = firstDeficitAgeFrom(incomeByAge, withdrawalByAge, ssByAge, expensesByAge, boundaryAge, EXPENSE_HORIZON_AGE);
+  const deficitAge = firstDeficitAgeFrom(incomeByAge, withdrawalByAge, ssByAge, savingsByAge, expensesByAge, boundaryAge, EXPENSE_HORIZON_AGE);
   const lastsFullHorizon = deficitAge === null;
   const yearsOfDraw = lastsFullHorizon ? EXPENSE_HORIZON_AGE - boundaryAge : deficitAge - boundaryAge;
 
@@ -173,8 +196,19 @@ export function findEarliestHouseholdRetirement(
     const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRate, overridesByPersonId, today);
     const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId, today);
     const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
+    const savingsByAge = projectHouseholdSavingsDrawdownByAge(
+      people,
+      currentAge,
+      EXPENSE_HORIZON_AGE,
+      incomeByAge,
+      withdrawalByAge,
+      ssByAge,
+      expensesByAge,
+      overridesByPersonId,
+      today,
+    );
 
-    if (firstDeficitAgeFrom(incomeByAge, withdrawalByAge, ssByAge, expensesByAge, currentAge, EXPENSE_HORIZON_AGE) === null) {
+    if (firstDeficitAgeFrom(incomeByAge, withdrawalByAge, ssByAge, savingsByAge, expensesByAge, currentAge, EXPENSE_HORIZON_AGE) === null) {
       const resultingAgeByPersonId: Record<string, number> = {};
       for (const p of people) resultingAgeByPersonId[p.id] = personAgeById.get(p.id)! + yearsOut;
       return { earliestYearsOut: yearsOut, resultingAgeByPersonId, plannedYearsOut, yearsEarlier: plannedYearsOut - yearsOut };

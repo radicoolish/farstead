@@ -27,6 +27,9 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     taxRatePct: 20,
     socialSecurityClaimAge: 67,
     socialSecurityMonthly: 0,
+    savingsBalance: 0,
+    savingsGrowthRatePct: 4,
+    savingsContributionMonthly: 0,
     scenarios: [],
     ...overrides,
   };
@@ -112,6 +115,11 @@ describe("firstDeficitAgeFrom", () => {
     [61, 0],
     [62, 0],
   ]);
+  const noSavings = new Map([
+    [60, 0],
+    [61, 0],
+    [62, 0],
+  ]);
 
   it("returns null when income covers expenses for the whole range", () => {
     const expenses = new Map([
@@ -119,7 +127,7 @@ describe("firstDeficitAgeFrom", () => {
       [61, 500],
       [62, 500],
     ]);
-    expect(firstDeficitAgeFrom(income, withdrawal, ss, expenses, 60, 62)).toBeNull();
+    expect(firstDeficitAgeFrom(income, withdrawal, ss, noSavings, expenses, 60, 62)).toBeNull();
   });
 
   it("returns the first age where expenses exceed income", () => {
@@ -128,7 +136,7 @@ describe("firstDeficitAgeFrom", () => {
       [61, 1500],
       [62, 1500],
     ]);
-    expect(firstDeficitAgeFrom(income, withdrawal, ss, expenses, 60, 62)).toBe(61);
+    expect(firstDeficitAgeFrom(income, withdrawal, ss, noSavings, expenses, 60, 62)).toBe(61);
   });
 
   it("ignores a deficit before startAge", () => {
@@ -137,7 +145,21 @@ describe("firstDeficitAgeFrom", () => {
       [61, 500],
       [62, 500],
     ]);
-    expect(firstDeficitAgeFrom(income, withdrawal, ss, expenses, 61, 62)).toBeNull();
+    expect(firstDeficitAgeFrom(income, withdrawal, ss, noSavings, expenses, 61, 62)).toBeNull();
+  });
+
+  it("a savings drawdown can cover what would otherwise be a deficit, but only up to what it actually draws", () => {
+    const expenses = new Map([
+      [60, 500], // surplus already, no shortfall
+      [61, 1500], // 500 shortfall — fully covered by savings below
+      [62, 1500], // 500 shortfall — only partly covered, still a real deficit
+    ]);
+    const savings = new Map([
+      [60, 0],
+      [61, 500], // exactly covers the 61 shortfall -> net 0, not a deficit
+      [62, 300], // covers only part of the 62 shortfall -> net -200
+    ]);
+    expect(firstDeficitAgeFrom(income, withdrawal, ss, savings, expenses, 60, 62)).toBe(62);
   });
 });
 

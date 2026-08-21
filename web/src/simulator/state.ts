@@ -26,6 +26,9 @@ export interface SimFields {
   taxRatePct: number;
   socialSecurityClaimAge: number;
   socialSecurityMonthly: number;
+  savingsBalance: number;
+  savingsGrowthRatePct: number;
+  savingsContributionMonthly: number;
 }
 
 export interface PersonSimState {
@@ -63,6 +66,9 @@ export function fieldsFromPerson(person: Person): SimFields {
     taxRatePct: person.taxRatePct,
     socialSecurityClaimAge: person.socialSecurityClaimAge,
     socialSecurityMonthly: person.socialSecurityMonthly,
+    savingsBalance: person.savingsBalance,
+    savingsGrowthRatePct: person.savingsGrowthRatePct,
+    savingsContributionMonthly: person.savingsContributionMonthly,
   };
 }
 

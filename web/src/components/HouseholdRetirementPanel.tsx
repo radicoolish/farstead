@@ -7,9 +7,11 @@ import {
   personScenarioOptions,
   projectBalance,
   projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdTotalExpensesByAge,
   projectHouseholdWithdrawalIncomeByAge,
+  projectSavingsBalance,
   type Expense,
   type Person,
   type PersonOverrides,
@@ -65,6 +67,15 @@ export function HouseholdRetirementPanel({
         }, 0)
       : null;
 
+  const combinedSavingsThen =
+    result.earliestYearsOut !== null
+      ? people.reduce((sum, person) => {
+          const overrides = { ...scenarioOverridesByPersonId[person.id], retirementAge: result.resultingAgeByPersonId[person.id] };
+          const rows = projectSavingsBalance(person, overrides, new Date());
+          return sum + rows[rows.length - 1].balance;
+        }, 0)
+      : null;
+
   const resultingAgesText = people.map((p) => `${p.name}: ${result.resultingAgeByPersonId[p.id]}`).join(" · ");
 
   let chartData: Array<{ age: number; Surplus: number; Deficit: number }> | null = null;
@@ -77,9 +88,24 @@ export function HouseholdRetirementPanel({
     const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, withdrawalRate, overridesByPersonId);
     const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE, overridesByPersonId);
     const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
+    const savingsByAge = projectHouseholdSavingsDrawdownByAge(
+      people,
+      currentAge,
+      EXPENSE_HORIZON_AGE,
+      incomeByAge,
+      withdrawalByAge,
+      ssByAge,
+      expensesByAge,
+      overridesByPersonId,
+    );
     chartData = [];
     for (let age = currentAge; age <= EXPENSE_HORIZON_AGE; age++) {
-      const net = (incomeByAge.get(age) ?? 0) + (withdrawalByAge.get(age) ?? 0) + (ssByAge.get(age) ?? 0) - (expensesByAge.get(age) ?? 0);
+      const net =
+        (incomeByAge.get(age) ?? 0) +
+        (withdrawalByAge.get(age) ?? 0) +
+        (ssByAge.get(age) ?? 0) +
+        (savingsByAge.get(age) ?? 0) -
+        (expensesByAge.get(age) ?? 0);
       chartData.push({ age, Surplus: Math.max(0, net), Deficit: Math.min(0, net) });
     }
   }
@@ -166,12 +192,19 @@ export function HouseholdRetirementPanel({
         {combinedBalanceThen !== null && (
           <StatTile label="Combined 401(k) Balance Then" value={formatCompactCurrency(combinedBalanceThen)} />
         )}
+        {combinedSavingsThen !== null && (
+          <StatTile
+            label="Combined Savings Balance Then"
+            value={formatCompactCurrency(combinedSavingsThen)}
+            help="Before any drawdown used to cover a shortfall"
+          />
+        )}
       </div>
 
       {chartData && (
         <ChartCard
           title={isHousehold ? "Household Surplus / Deficit at the Earliest Shared Retirement" : "Surplus / Deficit at the Earliest Retirement"}
-          subtitle="Total income (earned + 401(k) withdrawal + Social Security) minus total expenses, if everyone retires at the year found above."
+          subtitle="Total income (earned + 401(k) withdrawal + Social Security + savings drawdown) minus total expenses, if everyone retires at the year found above."
           height={240}
         >
           <ResponsiveContainer width="100%" height="100%">

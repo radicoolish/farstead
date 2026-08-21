@@ -6,8 +6,10 @@ import {
   projectBalance,
   projectHouseholdBalanceByAge,
   projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdWithdrawalIncomeByAge,
+  projectSavingsBalance,
   projectSeriesByYear,
 } from "./projection";
 import type { Person, Scenario } from "./types";
@@ -37,6 +39,9 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     taxRatePct: 20,
     socialSecurityClaimAge: 67,
     socialSecurityMonthly: 0,
+    savingsBalance: 0,
+    savingsGrowthRatePct: 4,
+    savingsContributionMonthly: 0,
     scenarios: [],
     ...overrides,
   };
@@ -294,14 +299,92 @@ describe("projectHouseholdBalanceByAge", () => {
   });
 });
 
+describe("projectSavingsBalance", () => {
+  it("starts at the current savings balance in the current year", () => {
+    const person = makePerson({ savingsBalance: 5000, savingsGrowthRatePct: 4, savingsContributionMonthly: 200 });
+    const rows = projectSavingsBalance(person, {}, TODAY);
+    expect(rows[0]).toEqual({ age: 40, year: 2026, balance: 5000 });
+  });
+
+  it("compounds growth plus the monthly contribution each year", () => {
+    const person = makePerson({ savingsBalance: 5000, savingsGrowthRatePct: 4, savingsContributionMonthly: 200 });
+    const rows = projectSavingsBalance(person, {}, TODAY);
+    // 5000 * 1.04 + 200*12 = 5200 + 2400 = 7600
+    expect(rows[1]).toEqual({ age: 41, year: 2027, balance: 7600 });
+  });
+
+  it("stops contributing at retirement age but keeps growing", () => {
+    const person = makePerson({
+      retirementAge: 42,
+      savingsBalance: 5000,
+      savingsGrowthRatePct: 4,
+      savingsContributionMonthly: 200,
+    });
+    const rows = projectSavingsBalance(person, {}, TODAY);
+    const at42 = rows.find((r) => r.age === 42)!;
+    // yearsToGrow = retirementAge(42) - age(40) = 2, so rows only go through
+    // age 42 — contributions stop being *added* past retirement, matching
+    // how projectBalance's own rows array stops at retirementAge too.
+    expect(rows[rows.length - 1]).toBe(at42);
+  });
+});
+
+describe("projectHouseholdSavingsDrawdownByAge", () => {
+  it("covers a shortfall from savings, clamping once the balance runs out", () => {
+    // Already retired (retirementAge 50 < personAge 60), no growth, no
+    // contribution — pure depletion, easy to hand-verify.
+    const person = makePerson({
+      birthday: "1966-01-01", // age 60 at TODAY
+      retirementAge: 50,
+      savingsBalance: 8000,
+      savingsGrowthRatePct: 0,
+      savingsContributionMonthly: 0,
+    });
+    const income = new Map([[60, 0], [61, 0], [62, 0]]);
+    const withdrawal = new Map([[60, 0], [61, 0], [62, 0]]);
+    const ss = new Map([[60, 0], [61, 0], [62, 0]]);
+    const expenses = new Map([[60, 5000], [61, 5000], [62, 5000]]);
+    const totals = projectHouseholdSavingsDrawdownByAge([person], 60, 62, income, withdrawal, ss, expenses, {}, TODAY);
+    expect(totals.get(60)).toBeCloseTo(5000, 2); // balance 8000 -> 3000
+    expect(totals.get(61)).toBeCloseTo(3000, 2); // clamped: only 3000 left
+    expect(totals.get(62)).toBe(0); // savings fully depleted
+  });
+
+  it("adds this year's contribution before drawing, for someone still working", () => {
+    const person = makePerson({
+      savingsBalance: 1000,
+      savingsGrowthRatePct: 0,
+      savingsContributionMonthly: 1000, // 12000/yr — still working (retirementAge 65 > age 40)
+    });
+    const income = new Map([[40, 0]]);
+    const withdrawal = new Map([[40, 0]]);
+    const ss = new Map([[40, 0]]);
+    const expenses = new Map([[40, 5000]]);
+    const totals = projectHouseholdSavingsDrawdownByAge([person], 40, 40, income, withdrawal, ss, expenses, {}, TODAY);
+    // available = 1000 + 12000 = 13000, comfortably covers the 5000 shortfall
+    expect(totals.get(40)).toBeCloseTo(5000, 2);
+  });
+
+  it("draws nothing when there's no shortfall", () => {
+    const person = makePerson({ savingsBalance: 10000 });
+    const income = new Map([[40, 100000]]);
+    const withdrawal = new Map([[40, 0]]);
+    const ss = new Map([[40, 0]]);
+    const expenses = new Map([[40, 5000]]);
+    const totals = projectHouseholdSavingsDrawdownByAge([person], 40, 40, income, withdrawal, ss, expenses, {}, TODAY);
+    expect(totals.get(40)).toBe(0);
+  });
+});
+
 describe("projectHouseholdSocialSecurityByAge", () => {
-  it("pays nothing before the claim age and a flat annualized amount after", () => {
+  // makePerson's default taxRatePct is 20 -> net = gross * (1 - 0.85*0.20) = gross * 0.83.
+  it("pays nothing before the claim age and a flat annualized (net of the simplified SS tax) amount after", () => {
     const person = makePerson({ socialSecurityClaimAge: 67, socialSecurityMonthly: 2000 });
     const totals = projectHouseholdSocialSecurityByAge([person], 40, 69, {}, TODAY);
     expect(totals.get(65)).toBe(0);
     expect(totals.get(66)).toBe(0);
-    expect(totals.get(67)).toBeCloseTo(24000, 5);
-    expect(totals.get(69)).toBeCloseTo(24000, 5);
+    expect(totals.get(67)).toBeCloseTo(24000 * 0.83, 5);
+    expect(totals.get(69)).toBeCloseTo(24000 * 0.83, 5);
   });
 
   it("honors a claim-age override without touching the base person data", () => {
@@ -313,8 +396,14 @@ describe("projectHouseholdSocialSecurityByAge", () => {
       { p1: { socialSecurityClaimAge: 62 } },
       TODAY,
     );
-    expect(totals.get(63)).toBeCloseTo(24000, 5);
+    expect(totals.get(63)).toBeCloseTo(24000 * 0.83, 5);
     expect(person.socialSecurityClaimAge).toBe(67);
+  });
+
+  it("applies the person's own tax rate — 0% tax leaves the benefit untouched", () => {
+    const person = makePerson({ socialSecurityClaimAge: 62, socialSecurityMonthly: 2000, taxRatePct: 0 });
+    const totals = projectHouseholdSocialSecurityByAge([person], 40, 62, {}, TODAY);
+    expect(totals.get(62)).toBeCloseTo(24000, 5);
   });
 });
 

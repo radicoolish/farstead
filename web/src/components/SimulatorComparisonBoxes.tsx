@@ -38,9 +38,10 @@ function ComparisonBox({ label, value, help, delta }: { label: string; value: st
 
 /** The Simulator's headline Actual-vs-Simulated comparison, at a glance:
  * combined 401(k) balance at retirement, and how many years the household's
- * retirement income (withdrawal + Social Security + any earned income)
- * keeps up with expenses before falling short ("years of draw"), for both
- * the saved household and the freely-edited simulated one. The Simulated
+ * retirement income (withdrawal + Social Security + savings drawdown + any
+ * earned income) keeps up with expenses before falling short ("years of
+ * draw"), for both the saved household and the freely-edited simulated
+ * one. The Simulated
  * box in each pair carries the Better/Worse delta against its Actual
  * counterpart; the charts below tell the same story over time instead of
  * as a single number. */

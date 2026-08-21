@@ -3,6 +3,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, R
 import {
   projectHouseholdBalanceByAge,
   projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdTotalExpensesByAge,
   projectHouseholdWithdrawalIncomeByAge,
@@ -33,7 +34,7 @@ function SingleAreaChart({ data, dataKey, color, gradId }: { data: Row[]; dataKe
   );
 }
 
-type ChartKey = "income" | "expenses" | "balance" | "withdrawal" | "socialSecurity" | "surplus";
+type ChartKey = "income" | "expenses" | "balance" | "withdrawal" | "socialSecurity" | "savings" | "surplus";
 
 const SIMPLE_CHART_META: Record<Exclude<ChartKey, "surplus">, { label: string; dataKey: string; subtitle: string; color: string }> = {
   income: {
@@ -63,8 +64,14 @@ const SIMPLE_CHART_META: Record<Exclude<ChartKey, "surplus">, { label: string; d
   socialSecurity: {
     label: "Social Security",
     dataKey: "Social Security",
-    subtitle: "Combined benefit once each person reaches their own claim age.",
+    subtitle: "Combined after-tax benefit once each person reaches their own claim age — 85% of the benefit is taxed at their Effective Tax Rate.",
     color: "#0891b2",
+  },
+  savings: {
+    label: "Savings Drawdown",
+    dataKey: "Savings Drawdown",
+    subtitle: "General savings drawn down to cover any shortfall — a backstop available at any age, not a fixed withdrawal like the 401(k).",
+    color: "#a855f7",
   },
 };
 
@@ -74,17 +81,19 @@ const CHART_ORDER: Array<{ key: ChartKey; label: string }> = [
   { key: "balance", label: "401(k) Balance" },
   { key: "withdrawal", label: "401(k) Withdrawal" },
   { key: "socialSecurity", label: "Social Security" },
+  { key: "savings", label: "Savings Drawdown" },
   { key: "surplus", label: "Surplus / Deficit" },
 ];
 
-/** Six linked charts — Income, Expenses, 401(k) Balance, 401(k)
- * Withdrawal, Social Security, and Surplus/Deficit — off one shared
- * household projection. Picked one at a time via a dropdown rather than
- * shown all at once, since six small charts side by side made any single
- * one harder to actually read. Once a person's earned income stops, their
- * withdrawal income (401(k) balance x withdrawal rate) takes over; Social
- * Security layers in independently once each person reaches their own
- * claim age. */
+/** Seven linked charts — Income, Expenses, 401(k) Balance, 401(k)
+ * Withdrawal, Social Security, Savings Drawdown, and Surplus/Deficit — off
+ * one shared household projection. Picked one at a time via a dropdown
+ * rather than shown all at once, since several small charts side by side
+ * made any single one harder to actually read. Once a person's earned
+ * income stops, their withdrawal income (401(k) balance x withdrawal
+ * rate) takes over; Social Security layers in independently once each
+ * person reaches their own claim age; savings drawdown is a backstop,
+ * covering whatever shortfall (if any) remains after those three. */
 export function HouseholdCashFlowCharts({
   people,
   expenses,
@@ -107,6 +116,16 @@ export function HouseholdCashFlowCharts({
   const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, horizonAge, withdrawalRate, overridesByPersonId);
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge, overridesByPersonId);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, horizonAge);
+  const savingsByAge = projectHouseholdSavingsDrawdownByAge(
+    people,
+    currentAge,
+    horizonAge,
+    incomeByAge,
+    withdrawalByAge,
+    ssByAge,
+    expensesByAge,
+    overridesByPersonId,
+  );
 
   const data: Row[] = [];
   for (let age = currentAge; age <= horizonAge; age++) {
@@ -114,8 +133,9 @@ export function HouseholdCashFlowCharts({
     const balance = balanceByAge.get(age) ?? 0;
     const withdrawal = withdrawalByAge.get(age) ?? 0;
     const ss = ssByAge.get(age) ?? 0;
+    const savings = savingsByAge.get(age) ?? 0;
     const exp = expensesByAge.get(age) ?? 0;
-    const net = income + withdrawal + ss - exp;
+    const net = income + withdrawal + ss + savings - exp;
     data.push({
       age,
       Income: income,
@@ -123,6 +143,7 @@ export function HouseholdCashFlowCharts({
       "401k Balance": balance,
       "401k Withdrawal": withdrawal,
       "Social Security": ss,
+      "Savings Drawdown": savings,
       Net: net,
       Surplus: Math.max(0, net),
       Deficit: Math.min(0, net),
@@ -146,7 +167,11 @@ export function HouseholdCashFlowCharts({
       </div>
 
       {activeChart === "surplus" ? (
-        <ChartCard title="Surplus / Deficit" subtitle="Total income minus total expenses — negative means expenses win that year." height={320}>
+        <ChartCard
+          title="Surplus / Deficit"
+          subtitle="Total income (including any savings drawdown) minus total expenses — negative means expenses win that year."
+          height={320}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <AreaGradientDefs

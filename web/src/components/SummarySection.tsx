@@ -8,9 +8,11 @@ import {
   householdRetirementBoundaryAge,
   projectBalance,
   projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdTotalExpensesByAge,
   projectHouseholdWithdrawalIncomeByAge,
+  projectSavingsBalance,
 } from "../calc";
 import { useAppData } from "../state/AppDataContext";
 import { resolveWithdrawalRate } from "../state/withdrawalRate";
@@ -70,6 +72,11 @@ export function SummarySection() {
     const rows = projectBalance(p);
     return sum + rows[rows.length - 1].balance;
   }, 0);
+  const combinedSavingsBalance = people.reduce((sum, p) => sum + p.savingsBalance, 0);
+  const combinedProjectedSavings = people.reduce((sum, p) => {
+    const rows = projectSavingsBalance(p);
+    return sum + rows[rows.length - 1].balance;
+  }, 0);
 
   // The retirement-age year itself still counts as a working year in the
   // underlying income projection (earned income stops the year *after*
@@ -94,17 +101,32 @@ export function SummarySection() {
   const withdrawalByAge = projectHouseholdWithdrawalIncomeByAge(people, currentAge, EXPENSE_HORIZON_AGE, resolveWithdrawalRate(withdrawalRate));
   const ssByAge = projectHouseholdSocialSecurityByAge(people, currentAge, EXPENSE_HORIZON_AGE);
   const expensesByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, EXPENSE_HORIZON_AGE);
+  const savingsByAge = projectHouseholdSavingsDrawdownByAge(
+    people,
+    currentAge,
+    EXPENSE_HORIZON_AGE,
+    incomeByAge,
+    withdrawalByAge,
+    ssByAge,
+    expensesByAge,
+  );
 
   const avgEarned = averageOverRange(incomeByAge, rangeStart, rangeEnd);
   const avgWithdrawal = averageOverRange(withdrawalByAge, rangeStart, rangeEnd);
   const avgSocialSecurity = averageOverRange(ssByAge, rangeStart, rangeEnd);
-  const avgTotalIncome = avgEarned + avgWithdrawal + avgSocialSecurity;
+  const avgSavingsDrawdown = averageOverRange(savingsByAge, rangeStart, rangeEnd);
+  const avgTotalIncome = avgEarned + avgWithdrawal + avgSocialSecurity + avgSavingsDrawdown;
   const avgExpenses = averageOverRange(expensesByAge, rangeStart, rangeEnd);
 
   const data: Array<{ age: number; Surplus: number; Deficit: number }> = [];
   let firstDeficitAge: number | null = null;
   for (let age = currentAge; age <= EXPENSE_HORIZON_AGE; age++) {
-    const net = (incomeByAge.get(age) ?? 0) + (withdrawalByAge.get(age) ?? 0) + (ssByAge.get(age) ?? 0) - (expensesByAge.get(age) ?? 0);
+    const net =
+      (incomeByAge.get(age) ?? 0) +
+      (withdrawalByAge.get(age) ?? 0) +
+      (ssByAge.get(age) ?? 0) +
+      (savingsByAge.get(age) ?? 0) -
+      (expensesByAge.get(age) ?? 0);
     if (net < 0 && firstDeficitAge === null) firstDeficitAge = age;
     data.push({ age, Surplus: Math.max(0, net), Deficit: Math.min(0, net) });
   }
@@ -167,14 +189,25 @@ export function SummarySection() {
         <StatTile
           label="Combined Social Security"
           value={`${formatCompactCurrency(avgSocialSecurity)}/yr`}
-          help={`Social Security income${periodSuffix}`}
+          help={`After-tax Social Security income — 85% of the benefit is taxed at each person's Effective Tax Rate${periodSuffix}`}
         />
         <StatTile
           label="Combined Total Income"
           value={`${formatCompactCurrency(avgTotalIncome)}/yr`}
-          help={`Earned + 401(k) Withdrawal + Social Security${periodSuffix}`}
+          help={`Earned + 401(k) Withdrawal + Social Security + Savings Drawdown${periodSuffix}`}
         />
         <StatTile label="Combined Expenses" value={`${formatCompactCurrency(avgExpenses)}/yr`} help={`All household expenses${periodSuffix}`} />
+        <StatTile label="Combined Savings Balance" value={formatCompactCurrency(combinedSavingsBalance)} help="Today — cash, brokerage, HYSA, etc." />
+        <StatTile
+          label="Projected Savings at Retirement"
+          value={formatCompactCurrency(combinedProjectedSavings)}
+          help="Combined savings balance at each person's own retirement age, before any drawdown"
+        />
+        <StatTile
+          label="Combined Savings Drawdown"
+          value={`${formatCompactCurrency(avgSavingsDrawdown)}/yr`}
+          help={`Savings drawn down to cover any shortfall — a backstop, not a fixed withdrawal${periodSuffix}`}
+        />
       </div>
 
       <div
@@ -191,7 +224,8 @@ export function SummarySection() {
         {firstDeficitAge ? (
           <p style={{ margin: 0 }}>
             <strong style={{ color: "var(--danger)" }}>Heads up —</strong> at your current assumptions, household expenses
-            first exceed income (including 401(k) withdrawals and Social Security) at <strong>age {firstDeficitAge}</strong>.
+            first exceed income (including 401(k) withdrawals, Social Security, and any savings drawdown) at{" "}
+            <strong>age {firstDeficitAge}</strong>.
           </p>
         ) : (
           <p style={{ margin: 0 }}>
@@ -224,7 +258,7 @@ export function SummarySection() {
 
       <ChartCard
         title="Household Surplus / Deficit"
-        subtitle="Total income (earned + 401(k) withdrawal + Social Security) minus total expenses, by age."
+        subtitle="Total income (earned + 401(k) withdrawal + Social Security + savings drawdown) minus total expenses, by age."
         height={280}
       >
         <ResponsiveContainer width="100%" height="100%">

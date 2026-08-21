@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   projectHouseholdNetIncomeByAge,
+  projectHouseholdSavingsDrawdownByAge,
   projectHouseholdSocialSecurityByAge,
   projectHouseholdTotalExpensesByAge,
   projectHouseholdWithdrawalIncomeByAge,
@@ -17,7 +18,7 @@ import { formatAxisCurrency, formatFullCurrency } from "../chart/format";
 
 type Row = { age: number; Actual: number; Simulated: number };
 
-type ChartKey = "income" | "withdrawal" | "socialSecurity" | "surplus";
+type ChartKey = "income" | "withdrawal" | "socialSecurity" | "savings" | "surplus";
 
 const CHART_META: Record<ChartKey, { label: string; title: string; subtitle: string; color: string }> = {
   income: {
@@ -35,8 +36,14 @@ const CHART_META: Record<ChartKey, { label: string; title: string; subtitle: str
   socialSecurity: {
     label: "Social Security",
     title: "Social Security",
-    subtitle: "Combined Social Security benefit, actual vs. simulated.",
+    subtitle: "Combined after-tax Social Security benefit, actual vs. simulated.",
     color: "#0d9488",
+  },
+  savings: {
+    label: "Savings Drawdown",
+    title: "Savings Drawdown",
+    subtitle: "General savings drawn down to cover any shortfall, actual vs. simulated.",
+    color: "#a855f7",
   },
   surplus: {
     label: "Surplus / Deficit",
@@ -46,7 +53,7 @@ const CHART_META: Record<ChartKey, { label: string; title: string; subtitle: str
   },
 };
 
-const CHART_ORDER: ChartKey[] = ["income", "withdrawal", "socialSecurity", "surplus"];
+const CHART_ORDER: ChartKey[] = ["income", "withdrawal", "socialSecurity", "savings", "surplus"];
 
 function DualAreaChart({ data, color, actualGradId, simGradId }: { data: Row[]; color: string; actualGradId: string; simGradId: string }) {
   return (
@@ -78,15 +85,16 @@ function DualAreaChart({ data, color, actualGradId, simGradId }: { data: Row[]; 
 }
 
 /** Actual-vs-Simulated comparison: one chart at a time (Income, 401(k)
- * Withdrawal, Social Security, Surplus/Deficit), picked via tabs rather
- * than shown all at once — easier to actually read a single line pair
- * than four small charts at a glance. Each shows the household's real,
- * saved projection alongside the freely-edited simulator projection.
- * Expenses aren't simulated (nothing in the Simulator can change them), so
- * unlike HouseholdCashFlowCharts there's no separate Expenses tab — it's
- * folded into the Surplus/Deficit math the same way for both series. Kept
- * to these four (no 401k Balance tab) since that addition was scoped to
- * the Household Expenses section's actual-data view. */
+ * Withdrawal, Social Security, Savings Drawdown, Surplus/Deficit), picked
+ * via tabs rather than shown all at once — easier to actually read a
+ * single line pair than several small charts at a glance. Each shows the
+ * household's real, saved projection alongside the freely-edited
+ * simulator projection. Expenses aren't simulated (nothing in the
+ * Simulator can change them), so unlike HouseholdCashFlowCharts there's no
+ * separate Expenses tab — it's folded into the Surplus/Deficit math the
+ * same way for both series. No 401k Balance tab here either, since that
+ * addition was scoped to the Household Expenses section's actual-data
+ * view. */
 export function SimulatorCharts({
   people,
   expenses,
@@ -113,10 +121,22 @@ export function SimulatorCharts({
   const actualSs = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge);
   const simSs = projectHouseholdSocialSecurityByAge(people, currentAge, horizonAge, simOverridesByPersonId);
   const expByAge = projectHouseholdTotalExpensesByAge(expenses, currentAge, horizonAge);
+  const actualSavings = projectHouseholdSavingsDrawdownByAge(people, currentAge, horizonAge, actualIncome, actualWithdrawal, actualSs, expByAge);
+  const simSavings = projectHouseholdSavingsDrawdownByAge(
+    people,
+    currentAge,
+    horizonAge,
+    simIncome,
+    simWithdrawal,
+    simSs,
+    expByAge,
+    simOverridesByPersonId,
+  );
 
   const incomeRows: Row[] = [];
   const withdrawalRows: Row[] = [];
   const ssRows: Row[] = [];
+  const savingsRows: Row[] = [];
   const surplusRows: Row[] = [];
 
   for (let age = currentAge; age <= horizonAge; age++) {
@@ -126,18 +146,22 @@ export function SimulatorCharts({
     const sWd = simWithdrawal.get(age) ?? 0;
     const aSs = actualSs.get(age) ?? 0;
     const sSs = simSs.get(age) ?? 0;
+    const aSav = actualSavings.get(age) ?? 0;
+    const sSav = simSavings.get(age) ?? 0;
     const exp = expByAge.get(age) ?? 0;
 
     incomeRows.push({ age, Actual: aInc, Simulated: sInc });
     withdrawalRows.push({ age, Actual: aWd, Simulated: sWd });
     ssRows.push({ age, Actual: aSs, Simulated: sSs });
-    surplusRows.push({ age, Actual: aInc + aWd + aSs - exp, Simulated: sInc + sWd + sSs - exp });
+    savingsRows.push({ age, Actual: aSav, Simulated: sSav });
+    surplusRows.push({ age, Actual: aInc + aWd + aSs + aSav - exp, Simulated: sInc + sWd + sSs + sSav - exp });
   }
 
   const rowsByChart: Record<ChartKey, Row[]> = {
     income: incomeRows,
     withdrawal: withdrawalRows,
     socialSecurity: ssRows,
+    savings: savingsRows,
     surplus: surplusRows,
   };
   const meta = CHART_META[activeChart];

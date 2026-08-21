@@ -114,6 +114,37 @@ export function PersonSimulatorPanel({ person, sim, onChange }: PersonSimulatorP
               onChange={(v) => updateField("socialSecurityMonthly", v)}
             />
           </div>
+          <div className="field">
+            <label htmlFor={id("savings-balance")}>Current Savings Balance ($)</label>
+            <NumberField
+              id={id("savings-balance")}
+              min={0}
+              step="any"
+              value={sim.fields.savingsBalance}
+              onChange={(v) => updateField("savingsBalance", v)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor={id("savings-growth")}>Savings Growth Rate (%)</label>
+            <NumberField
+              id={id("savings-growth")}
+              min={0}
+              max={50}
+              step="any"
+              value={sim.fields.savingsGrowthRatePct}
+              onChange={(v) => updateField("savingsGrowthRatePct", v)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor={id("savings-contribution")}>Monthly Savings Contribution ($)</label>
+            <NumberField
+              id={id("savings-contribution")}
+              min={0}
+              step="any"
+              value={sim.fields.savingsContributionMonthly}
+              onChange={(v) => updateField("savingsContributionMonthly", v)}
+            />
+          </div>
         </div>
       </details>
 

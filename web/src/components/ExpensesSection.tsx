@@ -66,13 +66,14 @@ export function ExpensesSection() {
 
           <h3>Household Income vs. Expenses</h3>
           <p className="caption">
-            Combined take-home income, after-tax 401(k) withdrawal income, Social Security, and total expenses
-            by age, with the surplus or deficit shown as bars. Once a person's earned income stops (their own
-            retirement age), their 401(k) balance x withdrawal rate takes over — taxed at their Effective Tax
-            Rate, plus a 10% early-withdrawal penalty for any Pre-tax withdrawal before age 60 (Roth is
-            modeled tax- and penalty-free); Social Security layers in independently once each person reaches
-            their own claim age. This always reflects your actual, saved data — to explore a 401(k) scenario
-            or freely adjust any input, use the Simulator section below.
+            Combined take-home income, after-tax 401(k) withdrawal income, Social Security, general savings
+            drawdown, and total expenses by age, with the surplus or deficit shown as bars. Once a person's
+            earned income stops (their own retirement age), their 401(k) balance x withdrawal rate takes over
+            — taxed at their Effective Tax Rate, plus a 10% early-withdrawal penalty for any Pre-tax
+            withdrawal before age 60 (Roth is modeled tax- and penalty-free); Social Security layers in
+            independently once each person reaches their own claim age; any remaining shortfall is covered
+            from general savings, at any age, up to what's available. This always reflects your actual, saved
+            data — to explore a 401(k) scenario or freely adjust any input, use the Simulator section below.
           </p>
           <WithdrawalRateInput label="401(k) Withdrawal Rate" value={withdrawalRate} onChange={setWithdrawalRate} />
           <HouseholdCashFlowCharts

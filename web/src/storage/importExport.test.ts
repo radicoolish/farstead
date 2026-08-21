@@ -20,6 +20,9 @@ const person: Person = {
   taxRatePct: 22,
   socialSecurityClaimAge: 67,
   socialSecurityMonthly: 0,
+  savingsBalance: 0,
+  savingsGrowthRatePct: 4,
+  savingsContributionMonthly: 0,
   scenarios: [],
 };
 

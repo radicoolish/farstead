@@ -53,6 +53,12 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
     initial?.socialSecurityMonthly ?? 0,
   );
 
+  const [savingsBalance, setSavingsBalance] = useState(initial?.savingsBalance ?? 0);
+  const [savingsGrowthRatePct, setSavingsGrowthRatePct] = useState(initial?.savingsGrowthRatePct ?? 4);
+  const [savingsContributionMonthly, setSavingsContributionMonthly] = useState(
+    initial?.savingsContributionMonthly ?? 0,
+  );
+
   const [nameError, setNameError] = useState<string | null>(null);
 
   const grossMonthly = currentSalary / 12;
@@ -86,6 +92,9 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
       stopContributionAge,
       socialSecurityClaimAge,
       socialSecurityMonthly,
+      savingsBalance,
+      savingsGrowthRatePct,
+      savingsContributionMonthly,
     });
   }
 
@@ -242,6 +251,32 @@ export function PersonForm({ initial, onSubmit, onCancel, submitLabel }: PersonF
               onEstimate={setSocialSecurityMonthly}
             />
           </div>
+        </div>
+      </div>
+
+      <h3>General Savings</h3>
+      <p className="caption" style={{ marginTop: 0 }}>
+        Cash, brokerage, or high-yield savings — separate from the 401(k), with no early-withdrawal
+        penalty or special tax when drawn on.
+      </p>
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor={id("savings-balance")}>Current Savings Balance ($)</label>
+          <NumberField id={id("savings-balance")} min={0} step="any" value={savingsBalance} onChange={setSavingsBalance} />
+        </div>
+        <div className="field">
+          <label htmlFor={id("savings-growth")}>Annual Growth Rate (%)</label>
+          <NumberField id={id("savings-growth")} min={0} max={50} step="any" value={savingsGrowthRatePct} onChange={setSavingsGrowthRatePct} />
+        </div>
+        <div className="field">
+          <label htmlFor={id("savings-contribution")}>Monthly Savings Contribution ($)</label>
+          <NumberField
+            id={id("savings-contribution")}
+            min={0}
+            step="any"
+            value={savingsContributionMonthly}
+            onChange={setSavingsContributionMonthly}
+          />
         </div>
       </div>
 

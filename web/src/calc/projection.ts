@@ -211,12 +211,21 @@ export function projectHouseholdWithdrawalIncomeByAge(
   return totals;
 }
 
-/** Combined Social Security income by household reference age, summed
+/** The real IRS rule taxes 0%, up to 50%, or up to 85% of Social Security
+ * benefits depending on a tiered "combined income" formula — well beyond
+ * this app's flat-effective-tax-rate model elsewhere. As a simplified
+ * stand-in, 85% (the ceiling most retirees with other income, like 401(k)
+ * withdrawals, actually hit) is treated as taxable at the person's own
+ * Effective Tax Rate. */
+const SS_TAXABLE_PORTION = 0.85;
+
+/** Combined Social Security *income* by household reference age, summed
  * across everyone, starting the year each person reaches their own claim
  * age — independent of whether they're still working or already retired.
- * The SSA earnings test, which can temporarily reduce benefits claimed
- * before full retirement age while still working, isn't modeled here.
- * Mirrors app.py's project_household_social_security_by_age. */
+ * Net of the simplified SS_TAXABLE_PORTION tax treatment (see above). The
+ * SSA earnings test, which can temporarily reduce benefits claimed before
+ * full retirement age while still working, isn't modeled here. Mirrors
+ * app.py's project_household_social_security_by_age. */
 export function projectHouseholdSocialSecurityByAge(
   people: Person[],
   currentAge: number,
@@ -229,9 +238,10 @@ export function projectHouseholdSocialSecurityByAge(
     const effective = effectivePerson(person, overridesByPersonId[person.id] ?? {});
     const personAge = calculateAge(effective.birthday, today);
     const claimAge = effective.socialSecurityClaimAge;
-    const monthly = effective.socialSecurityMonthly;
+    const gross = effective.socialSecurityMonthly * 12;
+    const net = gross * (1 - SS_TAXABLE_PORTION * (effective.taxRatePct / 100));
     for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
-      if (personAge + i >= claimAge) addTo(totals, age, monthly * 12);
+      if (personAge + i >= claimAge) addTo(totals, age, net);
     }
   }
   return totals;
@@ -285,6 +295,86 @@ export function projectHouseholdBalanceByAge(
       }
       addTo(totals, age, balance);
     }
+  }
+  return totals;
+}
+
+/** Year-by-year general (non-401(k)) savings balance from today through
+ * retirement — simpler than projectBalance: a flat monthly contribution
+ * (not tied to salary or an income-change step) compounding at the
+ * person's own savings growth rate, stopping automatically at their
+ * retirement age (no separate "stop contribution age" for savings — once
+ * earned income stops, so does the ability to keep contributing). */
+export function projectSavingsBalance(
+  person: Person,
+  overrides: PersonOverrides = {},
+  today: Date = new Date(),
+): BalancePoint[] {
+  const effective = effectivePerson(person, overrides);
+  const age = calculateAge(effective.birthday, today);
+  const yearsToGrow = Math.max(effective.retirementAge - age, 0);
+  const growthRate = effective.savingsGrowthRatePct / 100;
+  const annualContribution = effective.savingsContributionMonthly * 12;
+
+  let balance = effective.savingsBalance;
+  const thisYear = today.getFullYear();
+  const rows: BalancePoint[] = [{ age, year: thisYear, balance: round2(balance) }];
+
+  for (let i = 1; i <= yearsToGrow; i++) {
+    balance = balance * (1 + growthRate) + annualContribution;
+    rows.push({ age: age + i, year: thisYear + i, balance: round2(balance) });
+  }
+  return rows;
+}
+
+/** Combined general-savings *income* drawn down each year to cover any
+ * shortfall — expenses exceeding earned + 401(k) withdrawal + Social
+ * Security income — summed across everyone. A general-purpose backstop,
+ * unlike the 401(k) which only draws down at a fixed rate after
+ * retirement: this is event-driven, available at *any* age (not just
+ * retirement), and carries no tax or early-withdrawal penalty since it
+ * isn't a retirement account. Each year, per person: contribute (while
+ * still working), draw down whatever's needed from whoever has a balance
+ * (list order — no per-person tax/penalty distinction makes whose dollar
+ * covers it irrelevant), then grow what's left. */
+export function projectHouseholdSavingsDrawdownByAge(
+  people: Person[],
+  currentAge: number,
+  horizonAge: number,
+  incomeByAge: ByAge,
+  withdrawalByAge: ByAge,
+  ssByAge: ByAge,
+  expensesByAge: ByAge,
+  overridesByPersonId: Record<string, PersonOverrides> = {},
+  today: Date = new Date(),
+): ByAge {
+  const totals = zeroedByAge(currentAge, horizonAge);
+  const state = people.map((p) => {
+    const effective = effectivePerson(p, overridesByPersonId[p.id] ?? {});
+    return {
+      balance: effective.savingsBalance,
+      growthRate: effective.savingsGrowthRatePct / 100,
+      annualContribution: effective.savingsContributionMonthly * 12,
+      personAge: calculateAge(effective.birthday, today),
+      retirementAge: effective.retirementAge,
+    };
+  });
+
+  for (let i = 0, age = currentAge; age <= horizonAge; age++, i++) {
+    let remaining = Math.max(
+      0,
+      (expensesByAge.get(age) ?? 0) - (incomeByAge.get(age) ?? 0) - (withdrawalByAge.get(age) ?? 0) - (ssByAge.get(age) ?? 0),
+    );
+    let drawnThisYear = 0;
+    for (const s of state) {
+      const stillContributing = s.personAge + i <= s.retirementAge;
+      const available = s.balance + (stillContributing ? s.annualContribution : 0);
+      const draw = Math.min(remaining, Math.max(0, available));
+      remaining -= draw;
+      drawnThisYear += draw;
+      s.balance = (available - draw) * (1 + s.growthRate);
+    }
+    addTo(totals, age, drawnThisYear);
   }
   return totals;
 }
