@@ -34,9 +34,13 @@ export function WelcomeScreen({ onDismiss }: { onDismiss: () => void }) {
         <LogoMark className="welcome-logo" />
 
         <h1 style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0 0 0.5rem" }}>Welcome to Farstead</h1>
-        <p style={{ fontSize: "0.95rem", color: "var(--ink-soft)", margin: "0 0 2rem", lineHeight: 1.5 }}>
+        <p style={{ fontSize: "0.95rem", color: "var(--ink-soft)", margin: "0 0 1rem", lineHeight: 1.5 }}>
           A household planner for income, 401(k) growth, expenses, and retirement — all in one place, worked out
           together instead of guessed at separately.
+        </p>
+        <p style={{ fontSize: "0.95rem", color: "var(--ink-soft)", margin: "0 0 2rem", lineHeight: 1.5 }}>
+          Prefer something quicker? Switch to <strong>Simple</strong> mode with the toggle in the top corner — one page
+          of inputs, one page of results. What's below is <strong>Advanced</strong> mode, the full per-person planner.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", textAlign: "left", marginBottom: "2rem" }}>

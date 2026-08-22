@@ -415,6 +415,29 @@ button.danger:hover {
   color: var(--on-accent);
 }
 
+.app-mode-toggle {
+  display: flex;
+  flex: none;
+}
+
+.app-mode-toggle button {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.app-mode-toggle button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+
+.app-mode-toggle button:last-child {
+  border-radius: 0 7px 7px 0;
+  margin-left: -1px;
+}
+
+.mode-toggle-short {
+  display: none;
+}
+
 .app-data-button,
 .app-theme-button,
 .app-welcome-button {
@@ -462,6 +485,21 @@ button.danger:hover {
      stay tappable, not just visually adequate. */
   .app-tab {
     padding: 0.8rem;
+  }
+
+  /* Spelled-out "Simple"/"Advanced" left no room for the section tabs
+     next to them on a narrow screen — collapse to one letter each,
+     mirroring how the tabs themselves go icon-only here too. */
+  .mode-toggle-full {
+    display: none;
+  }
+
+  .mode-toggle-short {
+    display: inline;
+  }
+
+  .app-mode-toggle button {
+    padding: 0.5rem 0.6rem;
   }
 
   .app-data-button,

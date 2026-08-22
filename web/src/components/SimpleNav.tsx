@@ -1,8 +1,7 @@
 import type { ComponentType } from "react";
-import { useAppData } from "../state/AppDataContext";
 import { useTheme, type ThemeMode } from "../state/ThemeContext";
-import type { PlanningMode, SectionKey } from "../sections";
-import { IconData, IconExpenses, IconFlag, IconGrowth, IconIncome, IconMoon, IconSimulator, IconSun, IconSystem, LogoMark } from "./icons";
+import type { PlanningMode, SimpleSectionKey } from "../sections";
+import { IconFlag, IconIncome, IconMoon, IconSun, IconSystem, LogoMark } from "./icons";
 import { PlanningModeToggle } from "./PlanningModeToggle";
 
 const THEME_ORDER: ThemeMode[] = ["light", "dark", "system"];
@@ -12,46 +11,34 @@ const THEME_META: Record<ThemeMode, { label: string; Icon: ComponentType<{ class
   system: { label: "System theme", Icon: IconSystem },
 };
 
-/** Icon + label per section, shared by the nav tabs and each section's own
- * header so the two stay visually tied together. */
-export const SECTION_META: Record<SectionKey, { label: string; Icon: ComponentType<{ className?: string }> }> = {
-  income: { label: "Income", Icon: IconIncome },
-  "401k": { label: "401(k)", Icon: IconGrowth },
-  expenses: { label: "Expenses", Icon: IconExpenses },
-  summary: { label: "When Can I Retire?", Icon: IconFlag },
-  simulator: { label: "Simulator", Icon: IconSimulator },
+export const SIMPLE_SECTION_META: Record<SimpleSectionKey, { label: string; Icon: ComponentType<{ className?: string }> }> = {
+  inputs: { label: "Inputs", Icon: IconIncome },
+  results: { label: "Results", Icon: IconFlag },
 };
 
-/** Canonical section order — shared with StepFooter so the "Continue" /
- * "Back" buttons walk the same sequence the tabs are laid out in. "When Can
- * I Retire?" (the summary key — see SECTION_META) sits after Expenses (the
- * last data-entry step) as the headline answer built on everything entered
- * so far, before moving on to the free-form Simulator. */
-export const SECTION_ORDER: SectionKey[] = ["income", "401k", "expenses", "summary", "simulator"];
+export const SIMPLE_SECTION_ORDER: SimpleSectionKey[] = ["inputs", "results"];
 
-/** Sticky top nav: one tab per section (click to switch — no forced order,
- * since revisiting an earlier section while tuning a later one is normal
- * here), with a small count badge once a section has data, plus a
- * standalone icon button that opens Data Management in a modal rather
- * than keeping it as a permanent on-page section. */
-export function AppNav({
+/** Simple mode's own top nav — just two tabs (Inputs/Results) instead of
+ * Advanced's five, and no data-management button (Simple mode has nothing
+ * to import/export/scenario-build yet). Deliberately not sharing AppNav
+ * itself: that component reads people/expenses counts via useAppData,
+ * which only exists inside AppDataProvider — wrapping Simple mode in that
+ * provider just to reuse the nav would blur the "these two modes keep
+ * fully separate data" boundary the rest of this feature is built on. */
+export function SimpleNav({
   active,
   onSelect,
-  onOpenDataManagement,
   onShowWelcome,
   planningMode,
   onPlanningModeChange,
 }: {
-  active: SectionKey;
-  onSelect: (key: SectionKey) => void;
-  onOpenDataManagement: () => void;
+  active: SimpleSectionKey;
+  onSelect: (key: SimpleSectionKey) => void;
   onShowWelcome: () => void;
   planningMode: PlanningMode;
   onPlanningModeChange: (mode: PlanningMode) => void;
 }) {
-  const { people, expenses } = useAppData();
   const { mode, setMode } = useTheme();
-  const counts: Partial<Record<SectionKey, number>> = { income: people.length, expenses: expenses.length };
 
   function cycleTheme() {
     const next = THEME_ORDER[(THEME_ORDER.indexOf(mode) + 1) % THEME_ORDER.length];
@@ -68,9 +55,8 @@ export function AppNav({
           <span className="app-brand-text">Farstead</span>
         </div>
         <nav className="app-tabs" aria-label="Sections">
-          {SECTION_ORDER.map((key) => {
-            const { label, Icon } = SECTION_META[key];
-            const count = counts[key];
+          {SIMPLE_SECTION_ORDER.map((key) => {
+            const { label, Icon } = SIMPLE_SECTION_META[key];
             return (
               <button
                 key={key}
@@ -82,7 +68,6 @@ export function AppNav({
               >
                 <Icon className="app-tab-icon" />
                 <span className="app-tab-label">{label}</span>
-                {!!count && <span className="app-tab-count">{count}</span>}
               </button>
             );
           })}
@@ -96,9 +81,6 @@ export function AppNav({
           title={THEME_META[mode].label}
         >
           <ThemeIcon />
-        </button>
-        <button type="button" className="app-data-button" onClick={onOpenDataManagement} aria-label="Data management">
-          <IconData />
         </button>
         <button type="button" className="app-welcome-button" onClick={onShowWelcome} aria-label="About Farstead" title="About Farstead">
           <LogoMark />

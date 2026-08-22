@@ -22,3 +22,5 @@ export function saveToStorage<T>(key: string, value: T): void {
 export const PEOPLE_KEY = "isp:people";
 export const EXPENSES_KEY = "isp:expenses";
 export const WELCOME_SEEN_KEY = "isp:welcomeSeen";
+export const SIMPLE_HOUSEHOLD_KEY = "isp:simpleHousehold";
+export const PLANNING_MODE_KEY = "isp:planningMode";

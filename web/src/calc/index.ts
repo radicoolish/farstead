@@ -7,3 +7,4 @@ export * from "./projection";
 export * from "./expenses";
 export * from "./scenarioFields";
 export * from "./summary";
+export * from "./simple";

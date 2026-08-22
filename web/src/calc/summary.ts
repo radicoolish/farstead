@@ -216,3 +216,54 @@ export function findEarliestHouseholdRetirement(
   }
   return { earliestYearsOut: null, resultingAgeByPersonId: {}, plannedYearsOut, yearsEarlier: null };
 }
+
+/** A fixed, curated set of retirement ages worth showing side by side —
+ * common milestones (early Social Security eligibility, full retirement
+ * age, etc.) rather than every single year, which would be too dense for
+ * a one-page summary table. */
+export const RETIREMENT_AGE_MILESTONES = [55, 60, 62, 65, 67, 70, 75] as const;
+
+export interface RetirementMilestone {
+  age: number;
+  combinedBalanceAtRetirement: number;
+  /** True if retiring at `age` keeps income covering expenses all the way
+   * through EXPENSE_HORIZON_AGE. */
+  lastsFullHorizon: boolean;
+  /** Age income first falls short of expenses, if retiring at `age`
+   * doesn't last the full horizon — null when it does. */
+  runsOutAtAge: number | null;
+}
+
+/** For each milestone retirement age (see RETIREMENT_AGE_MILESTONES),
+ * reports whether retiring *everyone* at that same age is sustainable
+ * through EXPENSE_HORIZON_AGE — a scanned spread of outcomes rather than a
+ * single earliest-age answer, so a household can see roughly where the
+ * cutoff falls instead of just one number. Ages at or before `currentAge`
+ * are skipped (already in the past, not a real choice). Reuses
+ * computeSimulatorComparisonMetrics per candidate age — the same metric
+ * already backing the Simulator's comparison boxes. */
+export function scanRetirementMilestones(
+  people: Person[],
+  expenses: Expense[],
+  currentAge: number,
+  withdrawalRate: WithdrawalRate,
+  overridesByPersonId: Record<string, PersonOverrides> = {},
+  today: Date = new Date(),
+  milestoneAges: readonly number[] = RETIREMENT_AGE_MILESTONES,
+): RetirementMilestone[] {
+  return milestoneAges
+    .filter((age) => age > currentAge)
+    .map((age) => {
+      const perPersonOverrides: Record<string, PersonOverrides> = {};
+      for (const p of people) perPersonOverrides[p.id] = { ...(overridesByPersonId[p.id] ?? {}), retirementAge: age };
+      const metrics = computeSimulatorComparisonMetrics(people, expenses, currentAge, withdrawalRate, perPersonOverrides, today);
+      return {
+        age,
+        combinedBalanceAtRetirement: metrics.combinedBalanceAtRetirement,
+        lastsFullHorizon: metrics.lastsFullHorizon,
+        // Every person shares the same overridden retirementAge here, so
+        // the household boundary age is just `age` itself.
+        runsOutAtAge: metrics.lastsFullHorizon ? null : age + metrics.yearsOfDraw,
+      };
+    });
+}

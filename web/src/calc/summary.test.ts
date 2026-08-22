@@ -5,6 +5,7 @@ import {
   findEarliestHouseholdRetirement,
   firstDeficitAgeFrom,
   householdRetirementBoundaryAge,
+  scanRetirementMilestones,
 } from "./summary";
 import type { Expense, Person } from "./types";
 
@@ -383,5 +384,51 @@ describe("findEarliestHouseholdRetirement", () => {
     expect(result.earliestYearsOut).toBeNull();
     expect(result.resultingAgeByPersonId).toEqual({});
     expect(result.yearsEarlier).toBeNull();
+  });
+});
+
+describe("scanRetirementMilestones", () => {
+  const TODAY = new Date(2026, 7, 16); // 2026-08-16, matches projection.test.ts's convention
+
+  it("reports sustainability at each milestone age, matching the exact fixed-dollar depletion boundary", () => {
+    // Same Alice/expense/withdrawal setup as findEarliestHouseholdRetirement's
+    // "matches single-person hand-derived results" test: age 40, flat
+    // $100k salary, 10% contribution, 0% growth, 20% tax (default),
+    // $4000/yr expenses, $5000/yr dollar withdrawal. That test established
+    // age 59 (yearsOut 19) as the earliest sustainable age — the knife
+    // edge is age-driven, not balance-driven: below age 60 the 10% early-
+    // withdrawal penalty stacks with the 20% tax, netting 5000*0.7=3500,
+    // already under the $4000 expense regardless of balance; at 60+ (no
+    // penalty) it nets exactly 5000*0.8=4000, a breakeven.
+    //
+    // So age 58 fails immediately at its very first withdrawal year (age
+    // 59, still under 60) rather than via balance depletion; ages 59 and
+    // 60 both last the full horizon.
+    const alice = makePerson({
+      id: "alice",
+      birthday: "1986-01-01", // age 40 at TODAY
+      retirementAge: 65,
+      currentBalance: 0,
+      currentSalary: 100000,
+      contributionPct: 10,
+      matchPct: 0,
+      salaryIncreasePct: 0,
+      growthRatePct: 0,
+      socialSecurityMonthly: 0,
+    });
+    const expenses = [makeExpense({ monthlyAmount: 4000 / 12 })];
+    const results = scanRetirementMilestones([alice], expenses, 40, { mode: "dollar", value: 5000 }, {}, TODAY, [58, 59, 60]);
+
+    expect(results).toHaveLength(3);
+    expect(results[0]).toMatchObject({ age: 58, combinedBalanceAtRetirement: 180000, lastsFullHorizon: false, runsOutAtAge: 59 });
+    expect(results[1]).toMatchObject({ age: 59, combinedBalanceAtRetirement: 190000, lastsFullHorizon: true, runsOutAtAge: null });
+    expect(results[2]).toMatchObject({ age: 60, combinedBalanceAtRetirement: 200000, lastsFullHorizon: true, runsOutAtAge: null });
+  });
+
+  it("skips milestone ages at or before the household's current age", () => {
+    const alice = makePerson({ id: "alice", birthday: "1986-01-01" }); // age 40 at TODAY
+    const expenses = [makeExpense({ monthlyAmount: 500 })];
+    const results = scanRetirementMilestones([alice], expenses, 40, { mode: "percent", value: 4 }, {}, TODAY, [30, 40, 50]);
+    expect(results.map((r) => r.age)).toEqual([50]);
   });
 });
