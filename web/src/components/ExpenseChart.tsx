@@ -1,12 +1,14 @@
-import { Area, AreaChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { buildExpenseChartData, EXPENSE_TYPES, type Expense } from "../calc";
 import { EXPENSE_PALETTE } from "../chart/palette";
 import { formatAxisCurrency, formatFullCurrency } from "../chart/format";
 
-/** Stacked area chart of every expense's annual cost by age, grouped by
- * type — a solid (not gradient) fill per band, since a top-to-bottom fade
- * reads oddly once bands are stacked on top of each other. Mirrors app.py's
- * Projected Household Expenses chart. */
+/** Stacked bar chart of every expense's annual cost by age, grouped by
+ * type — crisper than a stacked area here, since a loan falling off (a
+ * hard vertical drop) reads as a jump between bars instead of a curve
+ * smoothing artifact, and flat color blocks stay easier to tell apart than
+ * adjacent translucent bands. Mirrors app.py's Projected Household
+ * Expenses chart. */
 export function ExpenseChart({
   expenses,
   currentAge,
@@ -25,25 +27,16 @@ export function ExpenseChart({
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }} barCategoryGap="10%">
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
         <XAxis dataKey="age" tick={{ fontSize: 12 }} label={{ value: "Age", position: "insideBottom", offset: -2, fontSize: 12 }} />
         <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 12 }} width={56} />
         <Tooltip formatter={(v) => formatFullCurrency(Number(v))} labelFormatter={(age) => `Age ${age}`} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         {typesPresent.map((type) => (
-          <Area
-            key={type}
-            type="monotone"
-            dataKey={type}
-            stackId="expenses"
-            stroke={EXPENSE_PALETTE[type]}
-            strokeWidth={1}
-            fill={EXPENSE_PALETTE[type]}
-            fillOpacity={0.82}
-          />
+          <Bar key={type} dataKey={type} stackId="expenses" fill={EXPENSE_PALETTE[type]} />
         ))}
-      </AreaChart>
+      </BarChart>
     </ResponsiveContainer>
   );
 }
